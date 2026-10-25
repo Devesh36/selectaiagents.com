@@ -1,0 +1,140 @@
+import { randomUUID } from "node:crypto";
+import { db, transaction } from "../src/lib/db";
+import {
+  canonical,
+  endpointConfigSchema,
+  validateConfig,
+} from "../src/lib/endpoint-config";
+import { targetAddresses } from "../src/lib/upstream";
+import { credit, settle } from "../src/lib/billing";
+
+async function main() {
+  const [command, arg1, arg2, arg3] = process.argv.slice(2);
+  if (command === "approve-endpoint") {
+    if (!arg1 || !arg2)
+      throw new Error(
+        "Usage: npm run ops -- approve-endpoint <agent-slug> <endpoint-id> [MAKER_CREDENTIAL_ENV]",
+      );
+    await transaction(async (c) => {
+      // One approval at a time makes contract equivalence checks race-safe.
+      await c.query("SELECT pg_advisory_xact_lock(72190422)");
+      const row = (
+        await c.query(
+          "SELECT config FROM endpoints WHERE agent_slug=$1 AND id=$2 FOR UPDATE",
+          [arg1, arg2],
+        )
+      ).rows[0];
+      if (!row) throw new Error("Endpoint not found");
+      const { credentialEnv: ignored, ...publicConfig } = row.config;
+      void ignored;
+      const config = {
+        ...endpointConfigSchema.parse(publicConfig),
+        ...(arg3 ? { credentialEnv: arg3 } : {}),
+      };
+      validateConfig(config);
+      await targetAddresses(config.url);
+      if (arg3 && (!/^MAKER_[A-Z0-9_]+$/.test(arg3) || !process.env[arg3]))
+        throw new Error(
+          "Credential must name an existing MAKER_* environment variable",
+        );
+      const others = (
+        await c.query(
+          "SELECT config FROM endpoints WHERE approved AND config->>'contract'=$1",
+          [config.contract],
+        )
+      ).rows;
+      if (
+        others.some(
+          (r) =>
+            canonical(r.config.inputSchema) !== canonical(config.inputSchema) ||
+            canonical(r.config.outputSchema) !== canonical(config.outputSchema),
+        )
+      )
+        throw new Error(
+          "Schemas conflict with the existing contract. Use a new versioned contract.",
+        );
+      await c.query(
+        "UPDATE endpoints SET approved=true,config=$3,updated_at=now() WHERE agent_slug=$1 AND id=$2",
+        [arg1, arg2, config],
+      );
+    });
+    console.log("Endpoint approved. No upstream request was sent.");
+  } else if (command === "disable-endpoint") {
+    await db.query(
+      "UPDATE endpoints SET approved=false WHERE agent_slug=$1 AND id=$2",
+      [arg1, arg2],
+    );
+    console.log("Endpoint disabled");
+  } else if (command === "credit") {
+    if (process.env.NODE_ENV === "production")
+      throw new Error(
+        "Development credits are disabled in production; use Stripe",
+      );
+    const amount = Number(arg2);
+    if (!arg1 || !Number.isFinite(amount) || amount <= 0 || amount > 100)
+      throw new Error("Usage: npm run ops -- credit <email> <USD, max 100>");
+    const user = (
+      await db.query('SELECT id FROM "user" WHERE email=$1', [arg1])
+    ).rows[0];
+    if (!user) throw new Error("Account not found");
+    await credit(user.id, Math.round(amount * 1e6), `dev:${randomUUID()}`);
+    console.log("Development credits added");
+  } else if (command === "stalled") {
+    console.table(
+      (
+        await db.query(
+          "SELECT id,user_id,reserved_micros,created_at FROM requests WHERE status='running' AND created_at<now()-interval '10 minutes'",
+        )
+      ).rows,
+    );
+  } else if (command === "resolve-stalled") {
+    if (!arg1 || !["refund", "charge"].includes(arg2) || !arg3)
+      throw new Error(
+        "Usage: resolve-stalled <request-id> refund|charge <verified-charge-micros>; inspect provider outcome first",
+      );
+    const request = (
+      await db.query(
+        "SELECT * FROM requests WHERE id=$1 AND status='running' AND created_at<now()-interval '10 minutes'",
+        [arg1],
+      )
+    ).rows[0];
+    if (!request) throw new Error("Stalled request not found");
+    const charge = arg2 === "refund" ? 0 : Number(arg3);
+    if (
+      !Number.isSafeInteger(charge) ||
+      charge < 0 ||
+      charge > Number(request.reserved_micros)
+    )
+      throw new Error("Invalid settlement amount");
+    await settle(
+      arg1,
+      charge,
+      {
+        error: {
+          message:
+            "An operator reconciled this interrupted request. Do not automatically repeat external actions.",
+        },
+        usage: { costUsd: charge / 1e6 },
+      },
+      502,
+    );
+    console.log("Request reconciled");
+  } else if (command === "cleanup") {
+    await db.query(
+      "UPDATE requests SET response=NULL WHERE finished_at<now()-interval '24 hours'",
+    );
+    await db.query(
+      "DELETE FROM rate_limits WHERE expires_at<now()-interval '1 day'",
+    );
+    console.log("Expired cached responses and rate limit buckets removed");
+  } else
+    throw new Error(
+      "Commands: approve-endpoint, disable-endpoint, credit, stalled, resolve-stalled, cleanup",
+    );
+}
+main()
+  .catch((e) => {
+    console.error(e.message);
+    process.exitCode = 1;
+  })
+  .finally(() => db.end());

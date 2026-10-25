@@ -1,0 +1,59 @@
+import { db } from "@/lib/db";
+import { endpointConfigSchema, validateConfig } from "@/lib/endpoint-config";
+import { handle, HttpError, jsonBody, sessionUser, limit } from "@/lib/http";
+async function owner(req: Request, slug: string, mutation: boolean) {
+  const user = await sessionUser(req, mutation);
+  if (
+    !(
+      await db.query(
+        "SELECT slug FROM agents WHERE slug=$1 AND owner_id=$2 AND NOT demo",
+        [slug, user.id],
+      )
+    ).rowCount
+  )
+    throw new HttpError(404, "Your agent was not found");
+  return user;
+}
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ slug: string }> },
+) {
+  return handle(async () => {
+    const { slug } = await params;
+    await owner(req, slug, false);
+    const { rows } = await db.query(
+      "SELECT id,approved,config-'credentialEnv' AS config FROM endpoints WHERE agent_slug=$1 ORDER BY id",
+      [slug],
+    );
+    return Response.json({ endpoints: rows });
+  });
+}
+export async function PUT(
+  req: Request,
+  { params }: { params: Promise<{ slug: string }> },
+) {
+  return handle(async () => {
+    const { slug } = await params;
+    const user = await owner(req, slug, true);
+    await limit(`configure:${user.id}`, 20);
+    const config = endpointConfigSchema.parse(await jsonBody(req));
+    try {
+      validateConfig(config);
+    } catch {
+      throw new HttpError(
+        400,
+        "Invalid schema or adapter. chat.v1 requires the documented chat schemas.",
+      );
+    }
+    await db.query(
+      `INSERT INTO endpoints(agent_slug,id,config) VALUES($1,$2,$3)
+      ON CONFLICT(agent_slug,id) DO UPDATE SET config=excluded.config,approved=false,updated_at=now()`,
+      [slug, config.id, config],
+    );
+    return Response.json({
+      status: "pending_review",
+      message:
+        "Saved. An operator must approve this endpoint before it receives calls.",
+    });
+  });
+}

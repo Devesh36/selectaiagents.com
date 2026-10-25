@@ -1,29 +1,32 @@
-import { NextResponse } from "next/server";
 import { agentId } from "./router";
 import type { Agent } from "./types";
-
-/**
- * In this preview any Bearer key is accepted and calls are not forwarded.
- * Replace with real key lookup and credit checks.
- */
-export function requireKey(req: Request): NextResponse | undefined {
-  if (!req.headers.get("authorization")?.startsWith("Bearer ")) {
-    return NextResponse.json(
-      { error: { message: "Missing Bearer API key", code: 401 } },
-      { status: 401 },
-    );
-  }
-}
 
 export function agentSummary(a: Agent) {
   return {
     id: agentId(a),
     name: a.name,
+    demo: Boolean(a.demo),
+    runnable:
+      !a.demo && a.stats.uptime >= 98 && a.endpoints.some((e) => e.available),
     description: a.tagline,
     category: a.category,
     created: a.launchedAt,
     pricing: a.pricing,
-    endpoints: a.endpoints.map((e) => ({ id: `${agentId(a)}#${e.id}`, price_usd: e.priceUsd, description: e.description })),
-    stats: { calls_7d: a.stats.calls7d, p50_ms: a.stats.p50Ms, p95_ms: a.stats.p95Ms, uptime: a.stats.uptime },
+    endpoints: a.endpoints.map((e) => ({
+      id: `${agentId(a)}#${e.id}`,
+      price_usd: e.priceUsd,
+      description: e.description,
+      available: e.available ?? false,
+      contract: e.contract,
+      input_schema: e.inputSchema,
+      output_schema: e.outputSchema,
+    })),
+    stats: {
+      calls_7d: a.stats.calls7d,
+      p50_ms: a.healthSamples ? a.stats.p50Ms : null,
+      p95_ms: a.healthSamples ? a.stats.p95Ms : null,
+      uptime: a.healthSamples ? a.stats.uptime : null,
+      health_samples: a.healthSamples ?? 0,
+    },
   };
 }

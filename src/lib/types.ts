@@ -21,6 +21,10 @@ export interface Pricing {
 }
 
 export interface Endpoint {
+  contract?: string;
+  available?: boolean;
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
   /** Short id; the full id is `<agentSlug>#<id>`. */
   id: string;
   method: "GET" | "POST";
@@ -41,6 +45,10 @@ export interface UsageStats {
 }
 
 export interface Agent {
+  demo?: boolean;
+  ownerId?: string;
+  dailyCalls?: Record<string, number>;
+  healthSamples?: number;
   slug: string;
   name: string;
   tagline: string;

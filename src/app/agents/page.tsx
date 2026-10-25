@@ -1,15 +1,25 @@
 import { Suspense } from "react";
 import { AgentFilters } from "@/components/AgentFilters";
-import { AgentListRow } from "@/components/AgentListRow";
+import { AgentCard } from "@/components/AgentCard";
 import { filterAgents, type CatalogSort } from "@/lib/rankings";
 import { listAgents } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Agents" };
 
-type Params = { q?: string; category?: string; pricing?: string; max_price?: string; sort?: string };
+type Params = {
+  q?: string;
+  category?: string;
+  pricing?: string;
+  max_price?: string;
+  sort?: string;
+};
 
-export default async function AgentsPage({ searchParams }: { searchParams: Promise<Params> }) {
+export default async function AgentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Params>;
+}) {
   const sp = await searchParams;
   const agents = filterAgents(await listAgents(), {
     q: sp.q,
@@ -23,10 +33,18 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Agents</h1>
-          <p className="mt-1 text-muted">Every agent you can call with one API key. {agents.length} shown.</p>
+          <span className="eyebrow catalog-label">
+            The directory / {String(agents.length).padStart(2, "0")} agents
+          </span>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Find your unfair advantage.
+          </h1>
+          <p className="mt-1 text-muted">
+            Specialized intelligence, ready for your next idea. Explore
+            capabilities, compare prices, and find your fit.
+          </p>
         </div>
-        <form className="flex w-full gap-2 sm:w-80">
+        <form className="catalog-search w-full sm:w-80">
           {Object.entries(sp)
             .filter(([k, v]) => k !== "q" && v)
             .map(([k, v]) => (
@@ -35,23 +53,29 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
           <input
             name="q"
             defaultValue={sp.q}
-            placeholder="Filter agents"
-            className="flex-1 rounded-md border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
+            placeholder="Search agents…"
+            aria-label="Search agents"
+            className="flex-1"
           />
+          <button aria-label="Search" type="submit">
+            ↗
+          </button>
         </form>
       </header>
-      <div className="grid grid-cols-1 gap-8 md:grid-cols-[200px_minmax(0,1fr)]">
+      <div className="catalog-layout">
         <Suspense>
           <AgentFilters />
         </Suspense>
         {agents.length === 0 ? (
-          <p className="text-muted">No agents match these filters.</p>
+          <div className="catalog-empty">
+            No agents match these filters. Try another category or search term.
+          </div>
         ) : (
-          <ul className="divide-y divide-line border-y border-line">
-            {agents.map((a) => (
-              <AgentListRow key={a.slug} agent={a} />
+          <div className="catalog-results">
+            {agents.map((a, i) => (
+              <AgentCard key={a.slug} agent={a} index={i} />
             ))}
-          </ul>
+          </div>
         )}
       </div>
     </div>
