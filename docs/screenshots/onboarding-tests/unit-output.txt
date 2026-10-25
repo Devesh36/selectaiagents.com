@@ -1,0 +1,80 @@
+
+> selectaiagents@0.1.0 test
+> tsx --test tests/*.test.ts
+
+TAP version 13
+# Subtest: private, mapped, link-local and loopback addresses cannot be upstreams
+ok 1 - private, mapped, link-local and loopback addresses cannot be upstreams
+  ---
+  duration_ms: 1.756041
+  type: 'test'
+  ...
+# Subtest: unsafe upstream protocols, credentials and unapproved destinations are rejected
+ok 2 - unsafe upstream protocols, credentials and unapproved destinations are rejected
+  ---
+  duration_ms: 0.339209
+  type: 'test'
+  ...
+# Subtest: chat and structured requests reject unsupported or ambiguous input
+ok 3 - chat and structured requests reject unsupported or ambiguous input
+  ---
+  duration_ms: 2.654
+  type: 'test'
+  ...
+# Subtest: chat contracts reject schema drift, and structured contracts validate both directions
+ok 4 - chat contracts reject schema drift, and structured contracts validate both directions
+  ---
+  duration_ms: 28.18975
+  type: 'test'
+  ...
+# Subtest: measured daily usage never falls back to synthetic seed totals
+ok 5 - measured daily usage never falls back to synthetic seed totals
+  ---
+  duration_ms: 1.353083
+  type: 'test'
+  ...
+# Subtest: listing rejects unusable maker ids and oversized prices
+ok 6 - listing rejects unusable maker ids and oversized prices
+  ---
+  duration_ms: 0.389542
+  type: 'test'
+  ...
+# Subtest: usage date advances at UTC midnight without a process restart
+ok 7 - usage date advances at UTC midnight without a process restart
+  ---
+  duration_ms: 0.132458
+  type: 'test'
+  ...
+# Subtest: operator access defaults closed and requires an exact configured user ID
+ok 8 - operator access defaults closed and requires an exact configured user ID
+  ---
+  duration_ms: 0.854042
+  type: 'test'
+  ...
+# Subtest: review decisions require a version and maker feedback for negative decisions
+ok 9 - review decisions require a version and maker feedback for negative decisions
+  ---
+  duration_ms: 1.955
+  type: 'test'
+  ...
+# Subtest: maker status distinguishes operator feedback from a pending review
+ok 10 - maker status distinguishes operator feedback from a pending review
+  ---
+  duration_ms: 0.228792
+  type: 'test'
+  ...
+# Subtest: prices preserve billable microdollars rather than rounding to cents
+ok 11 - prices preserve billable microdollars rather than rounding to cents
+  ---
+  duration_ms: 72.61625
+  type: 'test'
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 353.511917

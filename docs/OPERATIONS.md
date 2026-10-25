@@ -146,3 +146,7 @@ Before public deployment, configure and verify: PostgreSQL backups/TLS, HTTPS/ca
 ### Displayed endpoint prices
 
 Catalog, detail, maker and discovery API summaries use the lowest approved endpoint price. If no endpoint is approved, they show the lowest current configured price; that price does not grant approval or enable calls. Only listings without configured endpoints retain their original declared pricing. Each endpoint keeps its own price, and the playground lists prices only for approved chat endpoints. USD labels preserve up to six fractional digits so a billable microdollar is not rounded away.
+
+### Onboarding regression coverage
+
+`npm run test:integration` runs `scripts/integration-onboarding.ts` through the existing isolated HTTP/PostgreSQL harness. It covers draft ownership and CSRF checks, save/resume and discovery exclusion, repeated/concurrent submission, invalid input, transaction rollback, competing names and approval removal after edits. The rollback case temporarily installs a narrowly targeted endpoint-insert failure trigger, removes it in `finally`, and verifies a retry succeeds. Both the harness and onboarding module require the database name `selectaiagents_test`; never point this suite at an application database.

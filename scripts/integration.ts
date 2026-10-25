@@ -11,6 +11,7 @@ import Stripe from "stripe";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { CHAT_INPUT, CHAT_OUTPUT } from "../src/lib/endpoint-config";
+import { onboardingChecks } from "./integration-onboarding";
 
 const origin = "http://127.0.0.1:3200";
 const database =
@@ -978,6 +979,12 @@ async function main() {
   const detail = await fetch(origin + `/agents/${priceSlug}`);
   assert.ok((await detail.text()).includes("$0.012345"), "display must preserve microdollar precision");
   check("edited endpoint prices, approval precedence, free pricing, filters and rendered price precision");
+  const fixtureAddress = upstream.address();
+  assert.ok(fixtureAddress && typeof fixtureAddress !== "string");
+  await onboardingChecks({
+    origin, pool, account, request, command, check,
+    upstreamUrl: `http://127.0.0.1:${fixtureAddress.port}/ok`,
+  });
   for (const route of [
     "/",
     "/agents",
