@@ -159,6 +159,18 @@ export function Account() {
               Sign out
             </button>
           </div>
+          <section className="maker-account-entry">
+            <div>
+              <p className="eyebrow">For makers</p>
+              <h2>Your ideas, ready for their next step.</h2>
+              <p>
+                Resume drafts, manage listings, and track endpoint approval.
+              </p>
+            </div>
+            <Link href="/maker" className="button button-dark">
+              Open maker studio <span>↗</span>
+            </Link>
+          </section>
           {!data ? (
             <p>Loading usage…</p>
           ) : (
@@ -303,6 +315,9 @@ export function Account() {
               </section>
               <section className="space-y-3">
                 <h2 className="text-xl font-semibold">Your agents</h2>
+                <Link href="/maker" className="text-accent text-sm">
+                  View drafts and approval statuses in maker studio →
+                </Link>
                 {data.agents.length === 0 ? (
                   <p className="text-muted">
                     You haven’t launched an agent yet.
@@ -316,7 +331,7 @@ export function Account() {
                           className="text-accent text-sm"
                           href={`/agents/${a.slug}/manage`}
                         >
-                          Configure endpoints →
+                          Manage agent →
                         </Link>
                       </li>
                     ))}

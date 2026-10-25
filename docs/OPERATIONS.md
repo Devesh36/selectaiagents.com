@@ -14,7 +14,7 @@ npm run db:migrate
 npm run dev -- --hostname 127.0.0.1 --port 3100
 ```
 
-The migration uses Better Auth's installed-version migration API for its tables and `db/001_platform.sql` for platform tables. Both are idempotent. The migration takes a PostgreSQL advisory lock; its platform DDL is transactional. Back up a populated database before future schema changes. Database failures surface as errors; there is no in-memory/JSON success fallback.
+The migration uses Better Auth's installed-version migration API for its tables and `db/001_platform.sql` for platform tables and `db/002_maker_drafts.sql` for private maker drafts. These migrations are idempotent. The migration takes a PostgreSQL advisory lock; its platform DDL is transactional. Back up a populated database before future schema changes. Database failures surface as errors; there is no in-memory/JSON success fallback.
 
 Optional demo catalog: run `npm run db:seed` and set `SHOW_DEMO_AGENTS=true`. Seeded listings are fictional, visibly marked, cannot receive votes or executions, and contribute no usage statistics. No legacy `.data/store.json` existed in this checkout. If another installation has one, import listings only after assigning real owners; anonymous legacy votes cannot establish one-vote-per-user identity.
 
@@ -26,9 +26,28 @@ Session mutations require an exact matching Origin. API clients use `Authorizati
 
 Authenticated users can publish listings immediately, vote once per listing (database unique constraint), comment, and delete their own comments. Maker profiles expose public names and owned listings, not email addresses. Daily/weekly/monthly leaderboards use current UTC calendar periods, votes cast within the period, and earlier launch time to break ties. Top-three badges are live standings, not permanent awards.
 
+## Maker studio and guided onboarding
+
+Open `/maker` from Account or the footer. `/submit` now guides makers through agent details, endpoint setup, and review. **Save draft** stores work privately in PostgreSQL; drafts are visible only to their owner and never appear in the directory, model list, rankings, or router. Save explicitly before leaving; drafts resume at the details step with all saved fields intact.
+
+Submitting publishes the listing and creates an unapproved endpoint in one transaction. Repeating the submission request returns the existing listing. The published listing is visible immediately, but calls remain disabled until operator approval. The older `POST /api/agents` API still supports direct listing-only creation for existing clients.
+
+The dashboard derives statuses from stored configuration and measured health:
+
+- **Draft:** a private, unpublished draft.
+- **Awaiting approval:** endpoint configuration exists, but none is approved.
+- **Live:** at least one approved endpoint and measured uptime is not below the routing threshold. No samples is explicitly shown as unmeasured.
+- **Needs attention:** a published listing has no configured endpoint, or measured uptime is below 98%.
+
+An agent with an approved endpoint and additional unapproved endpoints remains Live; the dashboard shows the pending count. Unapproved also covers operator-disabled endpoints: there is no separate rejection reason or review queue yet.
+
+Manage a published agent at `/agents/<slug>/manage`. Makers can edit descriptions, category, website and tags; agent/maker names stay fixed to preserve public/API identity. The guided endpoint editor takes USD prices and seconds, converting them to existing integer server units. Custom contracts remain available in the advanced JSON editor. Saving an endpoint, including a price change, revokes its prior approval and clears its attached credential reference until the operator approves it again. Drafts are preparation, not proof that an endpoint works.
+
+Run `npm run db:migrate` before using these routes on an existing installation. The maker flow has been compile-checked; interactive and live-provider verification are intentionally deferred.
+
 ## Onboarding a real maker endpoint
 
-1. Maker launches the listing, then opens **Account → Configure endpoints**.
+1. Maker opens **Account → Maker studio → New agent**, saves details and an endpoint, then submits the review step. Existing listings use **Manage agent**.
 2. Maker submits its URL, schemas, versioned contract, fixed microdollar price, timeout and side-effect declaration. Configuration stays private except for public endpoint schemas, pricing and availability. All edits disable routing until reviewed again.
 3. Operator verifies ownership, behavior, price, side-effect declaration, data handling and schema compatibility. Review schemas as executable validation rules, including regex complexity. This is a deliberate manual control; submission alone does not prove an agent works.
 4. Operator adds the exact hostname to `ROUTER_ALLOWED_HOSTS`. Store any provider token under a dedicated `MAKER_*` environment variable on the server. Never reuse unrelated service credentials.

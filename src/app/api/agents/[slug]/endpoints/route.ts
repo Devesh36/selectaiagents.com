@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { endpointConfigSchema, validateConfig } from "@/lib/endpoint-config";
+import { reviewedEndpoint } from "@/lib/maker";
 import { handle, HttpError, jsonBody, sessionUser, limit } from "@/lib/http";
 async function owner(req: Request, slug: string, mutation: boolean) {
   const user = await sessionUser(req, mutation);
@@ -36,15 +36,7 @@ export async function PUT(
     const { slug } = await params;
     const user = await owner(req, slug, true);
     await limit(`configure:${user.id}`, 20);
-    const config = endpointConfigSchema.parse(await jsonBody(req));
-    try {
-      validateConfig(config);
-    } catch {
-      throw new HttpError(
-        400,
-        "Invalid schema or adapter. chat.v1 requires the documented chat schemas.",
-      );
-    }
+    const config = reviewedEndpoint(await jsonBody(req));
     await db.query(
       `INSERT INTO endpoints(agent_slug,id,config) VALUES($1,$2,$3)
       ON CONFLICT(agent_slug,id) DO UPDATE SET config=excluded.config,approved=false,updated_at=now()`,

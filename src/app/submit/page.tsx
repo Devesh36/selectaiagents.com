@@ -13,8 +13,8 @@ export default async function SubmitPage() {
       <header>
         <h1 className="text-3xl font-bold tracking-tight">Launch an agent</h1>
         <p className="mt-1 text-muted">
-          Your agent goes live on today&apos;s launch list. Once it is routed
-          through the API, its usage counts toward the rankings.
+          Start with a private draft. Add your endpoint, review the details, and
+          submit when you’re ready. Calls require operator approval.
         </p>
       </header>
       <SubmitForm />
