@@ -11,6 +11,7 @@ const NAV = [
   { href: "/launches", label: "Launches" },
   { href: "/rankings", label: "Rankings" },
   { href: "/agents", label: "Agents" },
+  { href: "/playground", label: "Playground" },
   { href: "/docs", label: "API" },
 ];
 
@@ -30,9 +31,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </Link>
               ))}
             </nav>
+            <form action="/agents" className="ml-auto hidden md:block">
+              <input
+                name="q"
+                placeholder="Search agents"
+                aria-label="Search agents"
+                className="w-48 rounded-md border border-line bg-surface px-3 py-1.5 text-sm outline-none focus:border-accent"
+              />
+            </form>
             <Link
               href="/submit"
-              className="ml-auto rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+              className="ml-auto md:ml-0 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
             >
               Launch an agent
             </Link>

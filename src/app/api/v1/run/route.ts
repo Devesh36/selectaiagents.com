@@ -1,29 +1,39 @@
 import { NextResponse } from "next/server";
-import { getAgent } from "@/lib/store";
+import { requireKey } from "@/lib/api";
+import { agentId, route, type SortBy } from "@/lib/router";
+import { listAgents } from "@/lib/store";
 
-// run: billed. Routes a call to `<agent>#<endpoint>`.
+// run: billed. Calls `<agent>#<endpoint>` with structured `input`, trying
+// `fallbacks` in order. `endpoint: "auto"` picks by `route.category`/`route.sort`.
 //
-// MVP: returns a sandbox response without contacting the agent. The real
-// router will validate `input` against the endpoint schema, inject the
-// maker's credentials, forward the request, meter usage, and record the call
-// for rankings.
+// Preview: returns a sandbox response without contacting the agent. The real
+// router will validate `input`, inject the maker's credentials, forward the
+// request, meter usage, and record the call for rankings.
 export async function POST(req: Request) {
-  if (!req.headers.get("authorization")?.startsWith("Bearer ")) {
-    return NextResponse.json({ error: "Missing Bearer API key" }, { status: 401 });
-  }
+  const denied = requireKey(req);
+  if (denied) return denied;
+
   const body = await req.json().catch(() => null);
-  const [slug, endpointId] = String(body?.endpoint ?? "").split("#");
-  const agent = slug ? await getAgent(slug) : undefined;
-  const endpoint = agent?.endpoints.find((e) => e.id === endpointId);
-  if (!agent || !endpoint) {
-    return NextResponse.json({ error: "Unknown endpoint; expected `<agent>#<endpoint>`" }, { status: 404 });
+  const result = route(await listAgents(), {
+    model: String(body?.endpoint ?? ""),
+    models: Array.isArray(body?.fallbacks) ? body.fallbacks.map(String) : undefined,
+    category: body?.route?.category,
+    sort: body?.route?.sort as SortBy | undefined,
+  });
+  if ("error" in result) {
+    return NextResponse.json(
+      { error: "Unknown or unavailable endpoint; expected `<agent>#<endpoint>`", routing: { attempts: result.attempts } },
+      { status: 404 },
+    );
   }
 
+  const { agent, endpoint, attempts } = result;
   return NextResponse.json({
     id: `run_${crypto.randomUUID()}`,
-    endpoint: `${agent.slug}#${endpoint.id}`,
+    endpoint: `${agentId(agent)}#${endpoint.id}`,
     mode: "sandbox",
     output: { message: `Sandbox response from ${agent.name}. Live routing is not enabled yet.` },
     usage: { costUsd: 0, wouldCostUsd: endpoint.priceUsd },
+    routing: { attempts },
   });
 }

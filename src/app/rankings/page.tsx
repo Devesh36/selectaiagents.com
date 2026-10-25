@@ -1,8 +1,10 @@
 import { Pills } from "@/components/Pills";
 import { Change, RankRow, callsLabel } from "@/components/RankRow";
-import { compact } from "@/lib/format";
+import { UsageChart } from "@/components/UsageChart";
+import { compact, dayLabel } from "@/lib/format";
 import { fastestGrowing, mostUsed, type Period } from "@/lib/rankings";
 import { listAgents } from "@/lib/store";
+import { stackedUsage, usageDays, USAGE_AS_OF } from "@/lib/usage";
 import { CATEGORIES, type CategoryId } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +22,12 @@ export default async function RankingsPage({
   const agents = await listAgents();
   const used = mostUsed(agents, period, category);
   const growing = fastestGrowing(agents).slice(0, 5);
+  const windowTotal = mostUsed(agents, period).reduce((s, r) => s + r.calls, 0) || 1;
+  // Colors follow the agent (its slot in the overall top 7), never the filtered rank.
+  const stacked = stackedUsage(agents).map((s, i) => ({
+    ...s,
+    color: s.key === "other" ? "var(--series-other)" : `var(--series-${i + 1})`,
+  }));
 
   const href = (p: Period, c?: string) => `/rankings?period=${p}${c ? `&category=${c}` : ""}`;
 
@@ -28,7 +36,16 @@ export default async function RankingsPage({
       <header>
         <h1 className="text-3xl font-bold tracking-tight">Rankings</h1>
         <p className="mt-1 text-muted">Which agents are developers actually calling? Ranked by routed API usage.</p>
+        <p className="mt-1 text-xs text-muted">Usage data through {dayLabel(USAGE_AS_OF)} (UTC)</p>
       </header>
+
+      <section className="space-y-3 rounded-xl border border-line bg-surface p-5">
+        <div>
+          <h2 className="text-xl font-semibold">Calls by agent</h2>
+          <p className="text-sm text-muted">Daily routed calls, last 30 days — top 7 agents and everything else.</p>
+        </div>
+        <UsageChart days={usageDays()} series={stacked} label="Daily routed calls by agent, last 30 days" />
+      </section>
 
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -58,7 +75,12 @@ export default async function RankingsPage({
                 rank={i + 1}
                 agent={r.agent}
                 primary={callsLabel(r.calls)}
-                secondary={<Change pct={r.changePct} />}
+                secondary={
+                  <span className="flex justify-end gap-2 text-xs">
+                    <span className="text-muted">{((r.calls / windowTotal) * 100).toFixed(1)}% share</span>
+                    <Change pct={r.changePct} />
+                  </span>
+                }
               />
             ))}
           </ol>
