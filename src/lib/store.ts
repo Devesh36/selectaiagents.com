@@ -39,15 +39,19 @@ export async function listAgents(
       row.configured_endpoints ??
       agent.endpoints.map((e) => ({ ...e, available: false }));
     const active = endpoints.filter((e) => e.available);
-    const price = active.length
-      ? Math.min(...active.map((e) => e.priceUsd))
+    // Prefer callable prices. When none are approved, show current submitted
+    // prices instead of the original listing snapshot (which may be stale).
+    // Legacy/demo listings without configured endpoints retain their pricing.
+    const priced = active.length ? active : (row.configured_endpoints ?? []);
+    const price = priced.length
+      ? Math.min(...priced.map((e: Endpoint) => e.priceUsd))
       : agent.pricing.priceUsd;
     return {
       ...agent,
       demo: row.demo,
       ownerId: row.owner_id ?? undefined,
       endpoints,
-      pricing: active.length
+      pricing: priced.length
         ? {
             model: price === 0 ? ("free" as const) : ("per_call" as const),
             priceUsd: price,

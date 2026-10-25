@@ -142,3 +142,7 @@ The suite covers auth/session ownership, CSRF, vote uniqueness, credential injec
 ## Production handoff
 
 Before public deployment, configure and verify: PostgreSQL backups/TLS, HTTPS/canonical origin, production auth secret and working verification/reset email, at least one reviewed external agent and its credential, Stripe test checkout then live account settings, refund/dispute handling, scheduled cache cleanup, alerts for reserved credits and failures, and a host that supports the router's duration limits. Keep demos off in production. Run the regression suite on the release commit and smoke-test the deployed URL. No live deployment or Git push is performed by the local implementation workflow.
+
+### Displayed endpoint prices
+
+Catalog, detail, maker and discovery API summaries use the lowest approved endpoint price. If no endpoint is approved, they show the lowest current configured price; that price does not grant approval or enable calls. Only listings without configured endpoints retain their original declared pricing. Each endpoint keeps its own price, and the playground lists prices only for approved chat endpoints. USD labels preserve up to six fractional digits so a billable microdollar is not rounded away.
