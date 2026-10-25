@@ -26,7 +26,7 @@ export async function listAgents(
     ) d GROUP BY agent_slug
   ) SELECT a.*,l.*,d.calls AS daily_calls,
     (SELECT count(*)::int FROM votes v WHERE v.agent_slug=a.slug) AS votes,
-    (SELECT jsonb_agg(jsonb_build_object('id',e.id,'contract',e.config->'contract','available',e.approved,
+    (SELECT jsonb_agg(jsonb_build_object('id',e.id,'contract',e.config->'contract','available',e.approved,'reviewStatus',e.review_status,
       'method','POST','path','/v1/run','description',e.config->'description','priceUsd',(e.config->>'priceMicros')::numeric/1000000,
       'inputSchema',e.config->'inputSchema','outputSchema',e.config->'outputSchema') ORDER BY e.id) FROM endpoints e WHERE e.agent_slug=a.slug) AS configured_endpoints
     FROM agents a LEFT JOIN logs l ON l.agent_slug=a.slug LEFT JOIN daily d ON d.agent_slug=a.slug

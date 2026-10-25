@@ -4,10 +4,25 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/client-api";
 import { EndpointFields, newEndpoint } from "@/components/maker/EndpointFields";
 import type { EndpointConfig } from "@/lib/endpoint-config";
-type Entry = { id: string; approved: boolean; config: EndpointConfig };
+import { ReviewFeedback } from "@/components/maker/ReviewFeedback";
+import {
+  reviewLabels,
+  type ReviewStatus,
+  type ReviewEvent,
+} from "@/lib/review-types";
+type Entry = {
+  id: string;
+  approved: boolean;
+  config: EndpointConfig;
+  review_status: ReviewStatus;
+  review_version: number;
+};
+type Review = ReviewEvent & { endpoint_id: string };
+type Response = { endpoints: Entry[]; reviews: Review[] };
 export function EndpointEditor({ slug }: { slug: string }) {
   const router = useRouter();
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [text, setText] = useState(JSON.stringify(newEndpoint, null, 2));
   const [selected, setSelected] = useState<string>();
   const [message, setMessage] = useState("");
@@ -18,10 +33,11 @@ export function EndpointEditor({ slug }: { slug: string }) {
   const path = `/api/agents/${slug}/endpoints`;
   useEffect(() => {
     let active = true;
-    api<{ endpoints: Entry[] }>(path)
+    api<Response>(path)
       .then((data) => {
         if (!active) return;
         setEntries(data.endpoints);
+        setReviews(data.reviews);
         if (data.endpoints[0]) {
           setSelected(data.endpoints[0].id);
           setText(JSON.stringify(data.endpoints[0].config, null, 2));
@@ -71,13 +87,23 @@ export function EndpointEditor({ slug }: { slug: string }) {
                 onClick={() => select(e)}
               >
                 <strong>{e.id}</strong>
-                <span>{e.approved ? "Approved" : "Awaiting approval"}</span>
+                <span>{reviewLabels[e.review_status]}</span>
               </button>
             ))}
             <button type="button" disabled={busy} onClick={() => select()}>
               + Add endpoint
             </button>
           </div>
+          {entries
+            .filter((e) => e.id === selected)
+            .map((e) => (
+              <ReviewFeedback
+                key={e.id}
+                status={e.review_status}
+                version={e.review_version}
+                reviews={reviews.filter((r) => r.endpoint_id === e.id)}
+              />
+            ))}
           <form
             onSubmit={async (e) => {
               e.preventDefault();
@@ -105,7 +131,9 @@ export function EndpointEditor({ slug }: { slug: string }) {
                 setDirty(false);
                 setSelected(config.id);
                 setMessage(result.message);
-                setEntries((await api<{ endpoints: Entry[] }>(path)).endpoints);
+                const data = await api<Response>(path);
+                setEntries(data.endpoints);
+                setReviews(data.reviews);
                 router.refresh();
               } catch (e) {
                 setError(

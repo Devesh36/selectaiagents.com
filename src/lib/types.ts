@@ -21,6 +21,7 @@ export interface Pricing {
 }
 
 export interface Endpoint {
+  reviewStatus?: "pending" | "approved" | "changes_requested" | "disabled";
   contract?: string;
   available?: boolean;
   inputSchema?: Record<string, unknown>;

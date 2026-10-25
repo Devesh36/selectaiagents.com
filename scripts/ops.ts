@@ -1,11 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { db, transaction } from "../src/lib/db";
-import {
-  canonical,
-  endpointConfigSchema,
-  validateConfig,
-} from "../src/lib/endpoint-config";
-import { targetAddresses } from "../src/lib/upstream";
+import { db } from "../src/lib/db";
+import { reviewEndpoint } from "../src/lib/endpoint-review";
 import { credit, settle } from "../src/lib/billing";
 
 async function main() {
@@ -15,56 +10,52 @@ async function main() {
       throw new Error(
         "Usage: npm run ops -- approve-endpoint <agent-slug> <endpoint-id> [MAKER_CREDENTIAL_ENV]",
       );
-    await transaction(async (c) => {
-      // One approval at a time makes contract equivalence checks race-safe.
-      await c.query("SELECT pg_advisory_xact_lock(72190422)");
-      const row = (
-        await c.query(
-          "SELECT config FROM endpoints WHERE agent_slug=$1 AND id=$2 FOR UPDATE",
-          [arg1, arg2],
-        )
-      ).rows[0];
-      if (!row) throw new Error("Endpoint not found");
-      const { credentialEnv: ignored, ...publicConfig } = row.config;
-      void ignored;
-      const config = {
-        ...endpointConfigSchema.parse(publicConfig),
-        ...(arg3 ? { credentialEnv: arg3 } : {}),
-      };
-      validateConfig(config);
-      await targetAddresses(config.url);
-      if (arg3 && (!/^MAKER_[A-Z0-9_]+$/.test(arg3) || !process.env[arg3]))
-        throw new Error(
-          "Credential must name an existing MAKER_* environment variable",
-        );
-      const others = (
-        await c.query(
-          "SELECT config FROM endpoints WHERE approved AND config->>'contract'=$1",
-          [config.contract],
-        )
-      ).rows;
-      if (
-        others.some(
-          (r) =>
-            canonical(r.config.inputSchema) !== canonical(config.inputSchema) ||
-            canonical(r.config.outputSchema) !== canonical(config.outputSchema),
-        )
+    const row = (
+      await db.query(
+        "SELECT review_version FROM endpoints WHERE agent_slug=$1 AND id=$2",
+        [arg1, arg2],
       )
-        throw new Error(
-          "Schemas conflict with the existing contract. Use a new versioned contract.",
-        );
-      await c.query(
-        "UPDATE endpoints SET approved=true,config=$3,updated_at=now() WHERE agent_slug=$1 AND id=$2",
-        [arg1, arg2, config],
-      );
-    });
-    console.log("Endpoint approved. No upstream request was sent.");
-  } else if (command === "disable-endpoint") {
-    await db.query(
-      "UPDATE endpoints SET approved=false WHERE agent_slug=$1 AND id=$2",
-      [arg1, arg2],
+    ).rows[0];
+    if (!row) throw new Error("Endpoint not found");
+    await reviewEndpoint(
+      arg1,
+      arg2,
+      {
+        action: "approve",
+        version: row.review_version,
+        note: "Approved through the operator CLI.",
+        ...(arg3 ? { credentialEnv: arg3 } : {}),
+      },
+      { type: "cli" },
     );
-    console.log("Endpoint disabled");
+    console.log(
+      "Endpoint approved and audit recorded. No upstream request was sent.",
+    );
+  } else if (command === "disable-endpoint") {
+    if (!arg1 || !arg2)
+      throw new Error(
+        "Usage: disable-endpoint <agent-slug> <endpoint-id> [reason]",
+      );
+    const row = (
+      await db.query(
+        "SELECT review_version FROM endpoints WHERE agent_slug=$1 AND id=$2",
+        [arg1, arg2],
+      )
+    ).rows[0];
+    if (!row) throw new Error("Endpoint not found");
+    await reviewEndpoint(
+      arg1,
+      arg2,
+      {
+        action: "disable",
+        version: row.review_version,
+        note:
+          arg3 ||
+          "Disabled through the operator CLI. Contact the operator for details.",
+      },
+      { type: "cli" },
+    );
+    console.log("Endpoint disabled and audit recorded");
   } else if (command === "credit") {
     if (process.env.NODE_ENV === "production")
       throw new Error(

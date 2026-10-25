@@ -25,6 +25,7 @@ const environment = {
   SHOW_DEMO_AGENTS: "true",
   ALLOW_LOCAL_UPSTREAM: "true",
   ROUTER_ALLOWED_HOSTS: "",
+  OPERATOR_USER_IDS: "",
   MAKER_TEST_TOKEN: "local-fixture-token",
   STRIPE_SECRET_KEY: "sk_test_local_fixture",
   STRIPE_WEBHOOK_SECRET: "whsec_local_fixture",
@@ -760,6 +761,181 @@ async function main() {
     401,
   );
   check("revoked keys immediately stop working");
+  // Operator review regression uses local fixture endpoints only; no task is forwarded.
+  const reviewSlug = await launch("Review Agent", alice.cookie);
+  const reviewConfig = await configure(reviewSlug, alice.cookie, "/ok");
+  const reviewPath = `/api/operator/endpoints/${reviewSlug}/run`;
+  const version = async () =>
+    (
+      await pool.query(
+        "SELECT review_version FROM endpoints WHERE agent_slug=$1 AND id='run'",
+        [reviewSlug],
+      )
+    ).rows[0].review_version as number;
+  const beforeReview = await version();
+  assert.equal(
+    (
+      await request(
+        reviewPath,
+        "POST",
+        { action: "disable", version: beforeReview, note: "Review fixture" },
+        { Cookie: bob.cookie },
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await request(
+        reviewPath,
+        "POST",
+        { action: "disable", version: beforeReview, note: "Review fixture" },
+        { Cookie: alice.cookie, Origin: "https://evil.example" },
+      )
+    ).status,
+    403,
+  );
+  assert.equal(await version(), beforeReview);
+  const { reviewEndpoint } = await import("../src/lib/endpoint-review");
+  const previousOperators = process.env.OPERATOR_USER_IDS;
+  const operator = { type: "operator" as const, id: bob.id, name: "Bob" };
+  try {
+    await assert.rejects(
+      reviewEndpoint(
+        reviewSlug,
+        "run",
+        { action: "disable", version: beforeReview, note: "Review fixture" },
+        operator,
+      ),
+      /Operator access/,
+    );
+    process.env.OPERATOR_USER_IDS = `${alice.id},${bob.id}`;
+    await assert.rejects(
+      reviewEndpoint(
+        reviewSlug,
+        "run",
+        { action: "approve", version: beforeReview, note: "" },
+        { type: "operator", id: alice.id, name: "Alice" },
+      ),
+      /another operator/,
+    );
+    await reviewEndpoint(
+      reviewSlug,
+      "run",
+      {
+        action: "request_changes",
+        version: beforeReview,
+        note: "Explain what data this action sends to the provider.",
+      },
+      operator,
+    );
+    await assert.rejects(
+      reviewEndpoint(
+        reviewSlug,
+        "run",
+        { action: "approve", version: beforeReview, note: "" },
+        operator,
+      ),
+      /changed after/,
+    );
+    let feedback = (
+      await request(`/api/agents/${reviewSlug}/endpoints`, "GET", undefined, {
+        Cookie: alice.cookie,
+      })
+    ).json;
+    assert.equal(feedback.endpoints[0].review_status, "changes_requested");
+    assert.equal(feedback.endpoints[0].approved, false);
+    assert.equal(feedback.endpoints[0].config.credentialEnv, undefined);
+    assert.equal(feedback.reviews[0].actor_name, "Bob");
+    assert.match(feedback.reviews[0].note, /Explain what data/);
+    assert.equal(feedback.reviews[0].config_snapshot, undefined);
+    assert.equal(
+      (
+        await request(`/api/agents/${reviewSlug}/endpoints`, "GET", undefined, {
+          Cookie: bob.cookie,
+        })
+      ).status,
+      404,
+    );
+    const reviewed = await version();
+    assert.equal(
+      (
+        await request(
+          `/api/agents/${reviewSlug}/endpoints`,
+          "PUT",
+          reviewConfig,
+          { Cookie: alice.cookie },
+        )
+      ).status,
+      200,
+    );
+    assert.equal(await version(), reviewed + 1);
+    await assert.rejects(
+      reviewEndpoint(
+        reviewSlug,
+        "run",
+        { action: "approve", version: reviewed, note: "" },
+        operator,
+      ),
+      /changed after/,
+    );
+    const pending = await version();
+    const approval = {
+      action: "approve" as const,
+      version: pending,
+      note: "Contract and local fixture reviewed.",
+      credentialEnv: "MAKER_TEST_TOKEN",
+    };
+    const competing = await Promise.allSettled([
+      reviewEndpoint(reviewSlug, "run", approval, operator),
+      reviewEndpoint(reviewSlug, "run", approval, operator),
+    ]);
+    assert.equal(competing.filter((r) => r.status === "fulfilled").length, 1);
+    assert.equal(competing.filter((r) => r.status === "rejected").length, 1);
+    await reviewEndpoint(
+      reviewSlug,
+      "run",
+      {
+        action: "disable",
+        version: await version(),
+        note: "Fixture review complete; leave this endpoint disabled.",
+      },
+      operator,
+    );
+    feedback = (
+      await request(`/api/agents/${reviewSlug}/endpoints`, "GET", undefined, {
+        Cookie: alice.cookie,
+      })
+    ).json;
+    assert.equal(feedback.endpoints[0].review_status, "disabled");
+    assert.equal(feedback.endpoints[0].approved, false);
+    const audit = (
+      await pool.query(
+        "SELECT * FROM endpoint_reviews WHERE agent_slug=$1 ORDER BY created_at",
+        [reviewSlug],
+      )
+    ).rows;
+    assert.equal(audit.length, 4); // CLI approval, request changes, approval, disable.
+    assert.equal(audit.filter((r) => r.actor_id === bob.id).length, 3);
+    assert.ok(
+      audit.every((r) => r.config_snapshot.credentialEnv === undefined),
+    );
+    assert.equal(
+      (
+        await pool.query(
+          "SELECT count(*)::int AS n FROM call_logs WHERE agent_slug=$1",
+          [reviewSlug],
+        )
+      ).rows[0].n,
+      0,
+    );
+    check(
+      "operator access, owner feedback, stale/concurrent decisions, resubmission and atomic audit history",
+    );
+  } finally {
+    if (previousOperators === undefined) delete process.env.OPERATOR_USER_IDS;
+    else process.env.OPERATOR_USER_IDS = previousOperators;
+  }
   for (const route of [
     "/",
     "/agents",
