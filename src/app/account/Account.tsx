@@ -10,6 +10,7 @@ const input =
 const button =
   "rounded-md bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-50";
 interface Data {
+  isOperator: boolean;
   wallet: { balanceUsd: number; reservedUsd: number; availableUsd: number };
   keys: {
     id: string;
@@ -175,6 +176,21 @@ export function Account() {
             <p>Loading usage…</p>
           ) : (
             <>
+              {data.isOperator && (
+                <section className="maker-account-entry">
+                  <div>
+                    <p className="eyebrow">For operators</p>
+                    <h2>Review the next connection.</h2>
+                    <p>
+                      Approve endpoints, request changes, and review decision
+                      history.
+                    </p>
+                  </div>
+                  <Link href="/operator" className="button button-dark">
+                    Open review queue <span>↗</span>
+                  </Link>
+                </section>
+              )}
               <section className="rounded-xl border border-line bg-surface p-5 space-y-4">
                 <h2 className="text-xl font-semibold">Prepaid credits</h2>
                 <div className="flex flex-wrap gap-8">

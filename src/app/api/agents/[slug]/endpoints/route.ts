@@ -22,10 +22,17 @@ export async function GET(
     const { slug } = await params;
     await owner(req, slug, false);
     const { rows } = await db.query(
-      "SELECT id,approved,config-'credentialEnv' AS config FROM endpoints WHERE agent_slug=$1 ORDER BY id",
+      "SELECT id,approved,review_status,review_version,config-'credentialEnv' AS config FROM endpoints WHERE agent_slug=$1 ORDER BY id",
       [slug],
     );
-    return Response.json({ endpoints: rows });
+    const reviews = await db.query(
+      `SELECT id,endpoint_id,reviewed_version,action,actor_name,actor_type,note,created_at FROM (
+        SELECT *,row_number() OVER(PARTITION BY endpoint_id ORDER BY created_at DESC,id DESC) AS position
+        FROM endpoint_reviews WHERE agent_slug=$1
+      ) recent WHERE position<=20 ORDER BY created_at DESC,id DESC`,
+      [slug],
+    );
+    return Response.json({ endpoints: rows, reviews: reviews.rows });
   });
 }
 export async function PUT(
@@ -39,7 +46,7 @@ export async function PUT(
     const config = reviewedEndpoint(await jsonBody(req));
     await db.query(
       `INSERT INTO endpoints(agent_slug,id,config) VALUES($1,$2,$3)
-      ON CONFLICT(agent_slug,id) DO UPDATE SET config=excluded.config,approved=false,updated_at=now()`,
+      ON CONFLICT(agent_slug,id) DO UPDATE SET config=excluded.config,approved=false,review_status='pending',review_version=endpoints.review_version+1,updated_at=now()`,
       [slug, config.id, config],
     );
     return Response.json({
