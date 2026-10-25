@@ -49,6 +49,7 @@ export default function RootLayout({
               </div>
               <div>
                 <span className="eyebrow">Build</span>
+                <Link href="/maker">Maker studio ↗</Link>
                 <Link href="/playground">Playground ↗</Link>
                 <Link href="/docs">API documentation ↗</Link>
                 <Link href="/submit">Launch your agent ↗</Link>

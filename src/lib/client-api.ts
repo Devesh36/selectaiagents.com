@@ -11,6 +11,15 @@ export async function api<T = Record<string, unknown>>(
   });
   const data = await response.json();
   if (!response.ok)
-    throw new Error(data.error?.message ?? "Request failed. Please try again.");
+    throw new Error(
+      data.error?.details
+        ?.map(
+          (issue: { path: string[]; message: string }) =>
+            `${issue.path.join(" ")}: ${issue.message}`,
+        )
+        .join(" · ") ||
+        data.error?.message ||
+        "Request failed. Please try again.",
+    );
   return data as T;
 }
