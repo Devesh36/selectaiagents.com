@@ -29,32 +29,33 @@ export interface RouteRequest {
   sort?: SortBy;
 }
 
-export interface Attempt {
-  model: string;
-  status: "ok" | "unavailable" | "not_found";
-}
-
-export interface Route {
-  agent: Agent;
-  endpoint: Endpoint;
-  attempts: Attempt[];
-}
-
-/** Agents below this 30-day uptime are treated as degraded and skipped. */
+/** Auto routing and fallbacks require enough observations before excluding an agent. */
 export const MIN_UPTIME = 98;
+export const MIN_HEALTH_SAMPLES = 20;
+export function healthyForRouting(agent: Agent) {
+  return (agent.healthSamples ?? 0) < MIN_HEALTH_SAMPLES || agent.stats.uptime >= MIN_UPTIME;
+}
 
-function resolve(agents: Agent[], ref: string): { agent: Agent; endpoint: Endpoint } | undefined {
+export function resolve(
+  agents: Agent[],
+  ref: string,
+): { agent: Agent; endpoint: Endpoint } | undefined {
   const [id, endpointId] = ref.split("#");
   const slug = id.includes("/") ? id.split("/")[1] : id;
-  const agent = agents.find((a) => a.slug === slug && (!id.includes("/") || agentId(a) === id));
-  const endpoint = endpointId ? agent?.endpoints.find((e) => e.id === endpointId) : agent?.endpoints[0];
+  const agent = agents.find(
+    (a) => a.slug === slug && (!id.includes("/") || agentId(a) === id),
+  );
+  const endpoint = endpointId
+    ? agent?.endpoints.find((e) => e.id === endpointId)
+    : agent?.endpoints[0];
   return agent && endpoint ? { agent, endpoint } : undefined;
 }
 
 function sortAgents(list: Agent[], sort: SortBy = "usage"): Agent[] {
   const key: Record<SortBy, (a: Agent) => number> = {
     price: (a) => a.pricing.priceUsd,
-    latency: (a) => a.stats.p50Ms,
+    latency: (a) =>
+      a.healthSamples ? a.stats.p50Ms : Number.POSITIVE_INFINITY,
     uptime: (a) => -a.stats.uptime,
     usage: (a) => -a.stats.calls7d,
   };
@@ -62,37 +63,21 @@ function sortAgents(list: Agent[], sort: SortBy = "usage"): Agent[] {
 }
 
 /** Candidate list for `auto`: agents matching the category and/or query, best first. */
-export function autoCandidates(agents: Agent[], req: Pick<RouteRequest, "category" | "query" | "sort">): string[] {
+export function autoCandidates(
+  agents: Agent[],
+  req: Pick<RouteRequest, "category" | "query" | "sort">,
+): string[] {
   let pool = searchAgents(agents, undefined, req.category);
   const words = (req.query ?? "").toLowerCase().match(/[a-z0-9]{4,}/g) ?? [];
   const scored = pool
-    .map((a) => ({ a, score: words.filter((w) => searchAgents([a], w).length).length }))
+    .map((a) => ({
+      a,
+      score: words.filter((w) => searchAgents([a], w).length).length,
+    }))
     .filter((x) => x.score > 0);
   if (scored.length) {
     const best = Math.max(...scored.map((x) => x.score));
     pool = scored.filter((x) => x.score === best).map((x) => x.a);
   }
   return sortAgents(pool, req.sort).map(agentId);
-}
-
-/**
- * Picks the endpoint to call, trying `model` then each fallback in order and
- * skipping degraded agents, like OpenRouter's `models` fallback list.
- */
-export function route(agents: Agent[], req: RouteRequest): Route | { error: string; attempts: Attempt[] } {
-  const chain =
-    req.model === "auto" ? autoCandidates(agents, req) : [req.model, ...(req.models ?? [])].filter(Boolean);
-  const attempts: Attempt[] = [];
-  for (const ref of chain) {
-    const hit = resolve(agents, ref);
-    if (!hit) {
-      attempts.push({ model: ref, status: "not_found" });
-    } else if (hit.agent.stats.uptime < MIN_UPTIME) {
-      attempts.push({ model: ref, status: "unavailable" });
-    } else {
-      attempts.push({ model: ref, status: "ok" });
-      return { ...hit, attempts };
-    }
-  }
-  return { error: chain.length ? "No available agent in the routing chain" : "No agent matched", attempts };
 }

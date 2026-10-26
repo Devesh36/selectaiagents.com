@@ -1,67 +1,103 @@
-import "server-only";
-import { promises as fs } from "node:fs";
-import path from "node:path";
-import { SEED_AGENTS } from "./seed";
-import type { Agent } from "./types";
+import { db, transaction } from "./db";
+import type { Agent, Endpoint } from "./types";
 
-// Minimal persistence for the MVP: seed agents live in code, while upvotes and
-// submitted agents are kept in a JSON file. Swap this module for a real
-// database (Postgres, Supabase, etc.) before deploying to a serverless host,
-// where the filesystem is read-only or ephemeral.
-
-interface StoreFile {
-  votes: Record<string, number>;
-  submitted: Agent[];
+/** UTC calendar windows match the published rankings methodology. */
+export async function listAgents(
+  includeDemo = process.env.SHOW_DEMO_AGENTS === "true",
+): Promise<Agent[]> {
+  const { rows } = await db.query(
+    `WITH boundaries AS (
+    SELECT date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' AS day
+  ), logs AS (
+    SELECT agent_slug,
+      count(*) FILTER(WHERE status='success' AND created_at >= day-interval '168 hours' AND created_at < day)::int AS c7,
+      count(*) FILTER(WHERE status='success' AND created_at >= day-interval '336 hours' AND created_at < day-interval '168 hours')::int AS p7,
+      count(*) FILTER(WHERE status='success' AND created_at >= day-interval '720 hours' AND created_at < day)::int AS c30,
+      count(*) FILTER(WHERE status='success' AND created_at < day-interval '720 hours')::int AS p30,
+      percentile_cont(0.5) WITHIN GROUP(ORDER BY latency_ms) FILTER(WHERE status='success' AND created_at>now()-interval '720 hours') AS p50,
+      percentile_cont(0.95) WITHIN GROUP(ORDER BY latency_ms) FILTER(WHERE status='success' AND created_at>now()-interval '720 hours') AS p95,
+      count(*) FILTER(WHERE created_at>now()-interval '720 hours')::int AS samples,
+      100.0*count(*) FILTER(WHERE status='success' AND created_at>now()-interval '720 hours') / NULLIF(count(*) FILTER(WHERE created_at>now()-interval '720 hours'),0) AS uptime
+    FROM call_logs CROSS JOIN boundaries WHERE created_at >= day-interval '1440 hours' GROUP BY agent_slug
+  ), daily AS (
+    SELECT agent_slug,jsonb_object_agg(day,calls) AS calls FROM (
+      SELECT agent_slug,to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD') AS day,count(*)::int AS calls
+      FROM call_logs WHERE status='success' AND created_at>now()-interval '744 hours' GROUP BY agent_slug,day
+    ) d GROUP BY agent_slug
+  ) SELECT a.*,l.*,d.calls AS daily_calls,
+    (SELECT count(*)::int FROM votes v WHERE v.agent_slug=a.slug) AS votes,
+    (SELECT jsonb_agg(jsonb_build_object('id',e.id,'contract',e.config->'contract','available',e.approved,
+      'method','POST','path','/v1/run','description',e.config->'description','priceUsd',(e.config->>'priceMicros')::numeric/1000000,
+      'inputSchema',e.config->'inputSchema','outputSchema',e.config->'outputSchema') ORDER BY e.id) FROM endpoints e WHERE e.agent_slug=a.slug) AS configured_endpoints
+    FROM agents a LEFT JOIN logs l ON l.agent_slug=a.slug LEFT JOIN daily d ON d.agent_slug=a.slug
+    WHERE ($1 OR NOT a.demo) ORDER BY a.created_at DESC`,
+    [includeDemo],
+  );
+  return rows.map((row) => {
+    const agent = row.data as Agent;
+    const endpoints: Endpoint[] =
+      row.configured_endpoints ??
+      agent.endpoints.map((e) => ({ ...e, available: false }));
+    const active = endpoints.filter((e) => e.available);
+    const price = active.length
+      ? Math.min(...active.map((e) => e.priceUsd))
+      : agent.pricing.priceUsd;
+    return {
+      ...agent,
+      demo: row.demo,
+      ownerId: row.owner_id ?? undefined,
+      endpoints,
+      pricing: active.length
+        ? {
+            model: price === 0 ? ("free" as const) : ("per_call" as const),
+            priceUsd: price,
+            unit: "call",
+          }
+        : agent.pricing,
+      stats: {
+        calls7d: row.c7 ?? 0,
+        callsPrev7d: row.p7 ?? 0,
+        calls30d: row.c30 ?? 0,
+        callsPrev30d: row.p30 ?? 0,
+        p50Ms: Math.round(row.p50 ?? 0),
+        p95Ms: Math.round(row.p95 ?? 0),
+        uptime: Number(row.uptime ?? 100),
+      },
+      upvotes: row.votes,
+      dailyCalls: row.daily_calls ?? {},
+      healthSamples: row.samples ?? 0,
+    };
+  });
 }
-
-const STORE_PATH = path.join(process.cwd(), ".data", "store.json");
-
-let cache: StoreFile | null = null;
-
-async function load(): Promise<StoreFile> {
-  if (cache) return cache;
-  try {
-    cache = JSON.parse(await fs.readFile(STORE_PATH, "utf8")) as StoreFile;
-  } catch {
-    cache = { votes: {}, submitted: [] };
-  }
-  return cache;
-}
-
-async function save(store: StoreFile) {
-  cache = store;
-  try {
-    await fs.mkdir(path.dirname(STORE_PATH), { recursive: true });
-    await fs.writeFile(STORE_PATH, JSON.stringify(store, null, 2));
-  } catch (err) {
-    // Read-only filesystem: keep the in-memory copy so the request still works.
-    console.warn("store: could not persist", err);
-  }
-}
-
-export async function listAgents(): Promise<Agent[]> {
-  const store = await load();
-  return [...SEED_AGENTS, ...store.submitted].map((a) => ({
-    ...a,
-    upvotes: a.upvotes + (store.votes[a.slug] ?? 0),
-  }));
-}
-
-export async function getAgent(slug: string): Promise<Agent | undefined> {
+export async function getAgent(slug: string) {
   return (await listAgents()).find((a) => a.slug === slug);
 }
-
-export async function upvote(slug: string): Promise<number | undefined> {
-  const agent = await getAgent(slug);
-  if (!agent) return undefined;
-  const store = await load();
-  store.votes[slug] = (store.votes[slug] ?? 0) + 1;
-  await save(store);
-  return agent.upvotes + 1;
+export async function addAgent(agent: Agent, ownerId: string) {
+  await db.query("INSERT INTO agents(slug,owner_id,data) VALUES($1,$2,$3)", [
+    agent.slug,
+    ownerId,
+    agent,
+  ]);
 }
-
-export async function addAgent(agent: Agent): Promise<void> {
-  const store = await load();
-  store.submitted.push(agent);
-  await save(store);
+export async function upvote(
+  slug: string,
+  userId: string,
+): Promise<number | undefined> {
+  return transaction(async (c) => {
+    const agent = await c.query(
+      "SELECT slug FROM agents WHERE slug=$1 AND NOT demo",
+      [slug],
+    );
+    if (!agent.rowCount) return undefined;
+    await c.query(
+      "INSERT INTO votes(agent_slug,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING",
+      [slug, userId],
+    );
+    return (
+      await c.query(
+        "SELECT count(*)::int AS count FROM votes WHERE agent_slug=$1",
+        [slug],
+      )
+    ).rows[0].count as number;
+  });
 }

@@ -7,10 +7,21 @@ import { Pills } from "@/components/Pills";
 import { Change } from "@/components/RankRow";
 import { UpvoteButton } from "@/components/UpvoteButton";
 import { UsageChart } from "@/components/UsageChart";
-import { categoryLabel, compact, dayLabel, duration, priceLabel, usd } from "@/lib/format";
+import {
+  categoryLabel,
+  compact,
+  dayLabel,
+  duration,
+  priceLabel,
+  usd,
+} from "@/lib/format";
 import { agentId } from "@/lib/router";
 import { getAgent, listAgents } from "@/lib/store";
 import { dailyUsage, usageDays } from "@/lib/usage";
+import { Comments } from "@/components/Comments";
+import { badges } from "@/lib/launches";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -20,13 +31,22 @@ const TABS = [
   { key: "api", label: "API" },
 ] as const;
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
   const agent = await getAgent((await params).slug);
-  return { title: agent?.name ?? "Agent not found", description: agent?.tagline };
+  return {
+    title: agent?.name ?? "Agent not found",
+    description: agent?.tagline,
+  };
 }
 
 const Code = ({ children }: { children: string }) => (
-  <pre className="overflow-x-auto rounded-xl bg-[#1c1917] p-4 text-sm text-[#fafaf9]">{children}</pre>
+  <pre className="overflow-x-auto rounded-xl bg-[#1c1917] p-4 text-sm text-[#fafaf9]">
+    {children}
+  </pre>
 );
 
 export default async function AgentPage({
@@ -42,8 +62,14 @@ export default async function AgentPage({
   const tab = TABS.find((t) => t.key === tabParam)?.key ?? "overview";
 
   const id = agentId(agent);
+  const base = `${process.env.BETTER_AUTH_URL || "http://localhost:3000"}/api/v1`;
   const { stats } = agent;
-  const change = stats.callsPrev7d > 0 ? ((stats.calls7d - stats.callsPrev7d) / stats.callsPrev7d) * 100 : null;
+  const awards = agent.demo ? [] : await badges(agent.slug);
+  const session = await auth.api.getSession({ headers: await headers() });
+  const change =
+    stats.callsPrev7d > 0
+      ? ((stats.calls7d - stats.callsPrev7d) / stats.callsPrev7d) * 100
+      : null;
   const alternatives = (await listAgents())
     .filter((a) => a.category === agent.category && a.slug !== agent.slug)
     .sort((a, b) => a.pricing.priceUsd - b.pricing.priceUsd)
@@ -60,12 +86,24 @@ export default async function AgentPage({
             <CopyButton text={id} />
           </div>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
-            <Link href={`/agents?category=${agent.category}`} className="hover:text-ink">
+            <Link
+              href={`/agents?category=${agent.category}`}
+              className="hover:text-ink"
+            >
               {categoryLabel(agent.category)}
             </Link>
-            <span>by {agent.maker}</span>
+            {agent.ownerId ? (
+              <Link href={`/makers/${agent.ownerId}`}>by {agent.maker}</Link>
+            ) : (
+              <span>by {agent.maker}</span>
+            )}
             <span>Launched {dayLabel(agent.launchedAt)}</span>
-            <a href={agent.website} target="_blank" rel="noreferrer" className="hover:text-ink">
+            <a
+              href={agent.website}
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-ink"
+            >
               Website ↗
             </a>
           </div>
@@ -77,18 +115,61 @@ export default async function AgentPage({
           >
             Try in Playground
           </Link>
-          <UpvoteButton slug={agent.slug} initial={agent.upvotes} />
+          <UpvoteButton
+            slug={agent.slug}
+            initial={agent.upvotes}
+            disabled={agent.demo}
+          />
         </div>
       </header>
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <span className="rounded-full border border-line px-3 py-1">
+          {agent.demo
+            ? "Demo — fictional listing"
+            : agent.endpoints.some((e) => e.available)
+              ? "Endpoint configured"
+              : "Listed — endpoint setup pending"}
+        </span>
+        {awards.map((label) => (
+          <span
+            className="rounded-full bg-accent/10 px-3 py-1 text-accent"
+            key={label}
+          >
+            {label}
+          </span>
+        ))}
+        {session?.user.id === agent.ownerId && (
+          <Link className="text-accent" href={`/agents/${agent.slug}/manage`}>
+            Configure endpoints →
+          </Link>
+        )}
+      </div>
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "Calls (7d)", value: compact(stats.calls7d), extra: <Change pct={change} /> },
+          {
+            label: "Calls (7d)",
+            value: compact(stats.calls7d),
+            extra: <Change pct={change} />,
+          },
           { label: "Pricing", value: priceLabel(agent.pricing) },
-          { label: "Latency p50 / p95", value: `${duration(stats.p50Ms)} / ${duration(stats.p95Ms)}` },
-          { label: "Uptime (30d)", value: `${stats.uptime}%` },
+          {
+            label: "Latency p50 / p95",
+            value: agent.healthSamples
+              ? `${duration(stats.p50Ms)} / ${duration(stats.p95Ms)}`
+              : "Not measured",
+          },
+          {
+            label: "Uptime (30d)",
+            value: agent.healthSamples
+              ? `${stats.uptime.toFixed(1)}% (${agent.healthSamples} calls)`
+              : "Not measured",
+          },
         ].map((s) => (
-          <div key={s.label} className="rounded-xl border border-line bg-surface p-4">
+          <div
+            key={s.label}
+            className="rounded-xl border border-line bg-surface p-4"
+          >
             <div className="text-xs text-muted">{s.label}</div>
             <div className="mt-1 font-semibold">{s.value}</div>
             {s.extra}
@@ -96,7 +177,13 @@ export default async function AgentPage({
         ))}
       </section>
 
-      <Pills active={tab} items={TABS.map((t) => ({ ...t, href: `/agents/${agent.slug}?tab=${t.key}` }))} />
+      <Pills
+        active={tab}
+        items={TABS.map((t) => ({
+          ...t,
+          href: `/agents/${agent.slug}?tab=${t.key}`,
+        }))}
+      />
 
       {tab === "overview" && (
         <div className="space-y-8">
@@ -105,12 +192,22 @@ export default async function AgentPage({
             <h2 className="mb-3 text-xl font-semibold">Endpoints</h2>
             <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
               {agent.endpoints.map((e) => (
-                <div key={e.id} className="flex flex-wrap items-center gap-3 p-4">
-                  <code className="rounded bg-line/60 px-1.5 py-0.5 text-xs">{e.method}</code>
+                <div
+                  key={e.id}
+                  className="flex flex-wrap items-center gap-3 p-4"
+                >
+                  <code className="rounded bg-line/60 px-1.5 py-0.5 text-xs">
+                    {e.method}
+                  </code>
                   <code className="text-sm">
                     {id}#{e.id}
                   </code>
-                  <span className="flex-1 text-sm text-muted">{e.description}</span>
+                  <span className="flex-1 text-sm text-muted">
+                    {e.description}
+                  </span>
+                  <span className="text-xs text-muted">
+                    {e.available ? e.contract : "Not configured"}
+                  </span>
                   <span className="text-sm font-medium">{usd(e.priceUsd)}</span>
                 </div>
               ))}
@@ -120,7 +217,8 @@ export default async function AgentPage({
             <section>
               <h2 className="mb-1 text-xl font-semibold">Alternatives</h2>
               <p className="mb-3 text-sm text-muted">
-                Other {categoryLabel(agent.category).toLowerCase()} agents, cheapest first. Use them as fallbacks.
+                Other {categoryLabel(agent.category).toLowerCase()} agents,
+                cheapest first. Fallbacks require matching endpoint contracts.
               </p>
               <ul className="divide-y divide-line border-y border-line">
                 {alternatives.map((a) => (
@@ -140,20 +238,30 @@ export default async function AgentPage({
               </Link>
             ))}
           </div>
+          {!agent.demo && <Comments slug={agent.slug} />}
         </div>
       )}
 
       {tab === "activity" && (
         <section className="space-y-3 rounded-xl border border-line bg-surface p-5">
           <div>
-            <h2 className="text-xl font-semibold">Daily calls to {agent.name}</h2>
+            <h2 className="text-xl font-semibold">
+              Daily calls to {agent.name}
+            </h2>
             <p className="text-sm text-muted">
               {compact(stats.calls30d)} routed calls in the last 30 days.
             </p>
           </div>
           <UsageChart
             days={usageDays()}
-            series={[{ key: agent.slug, label: agent.name, values: dailyUsage(agent), color: "var(--series-1)" }]}
+            series={[
+              {
+                key: agent.slug,
+                label: agent.name,
+                values: dailyUsage(agent),
+                color: "var(--series-1)",
+              },
+            ]}
             label={`Daily calls to ${agent.name}, last 30 days`}
           />
         </section>
@@ -162,17 +270,23 @@ export default async function AgentPage({
       {tab === "api" && (
         <div className="space-y-6">
           <p className="text-muted">
-            The API is OpenAI-compatible: point any OpenAI SDK at <code>https://selectaiagents.com/api/v1</code> and use{" "}
-            <code>{id}</code> as the model. Add <code>models</code> to fall back to alternatives.
+            For approved chat.v1 endpoints, point the OpenAI SDK at{" "}
+            <code>{base}</code> and use <code>{id}</code> as the model. Add{" "}
+            <code>models</code> to fall back to alternatives.
           </p>
           <section className="space-y-2">
             <h3 className="font-semibold">curl</h3>
-            <Code>{`curl https://selectaiagents.com/api/v1/chat/completions \\
+            <Code>{`curl ${base}/chat/completions \\
   -H "Authorization: Bearer $SAA_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "${id}",
-    "models": [${alternatives.map((a) => `"${agentId(a)}"`).join(", ")}],
+    "models": [${alternatives
+      .filter((a) =>
+        a.endpoints.some((e) => e.available && e.contract === "chat.v1"),
+      )
+      .map((a) => `"${agentId(a)}"`)
+      .join(", ")}],
     "messages": [{"role": "user", "content": "..."}]
   }'`}</Code>
           </section>
@@ -180,7 +294,7 @@ export default async function AgentPage({
             <h3 className="font-semibold">Python (OpenAI SDK)</h3>
             <Code>{`from openai import OpenAI
 
-client = OpenAI(base_url="https://selectaiagents.com/api/v1", api_key="<SAA_API_KEY>")
+client = OpenAI(base_url="${base}", api_key="<SAA_API_KEY>")
 
 res = client.chat.completions.create(
     model="${id}",
@@ -192,7 +306,7 @@ print(res.choices[0].message.content)`}</Code>
             <h3 className="font-semibold">TypeScript (OpenAI SDK)</h3>
             <Code>{`import OpenAI from "openai";
 
-const client = new OpenAI({ baseURL: "https://selectaiagents.com/api/v1", apiKey: process.env.SAA_API_KEY });
+const client = new OpenAI({ baseURL: "${base}", apiKey: process.env.SAA_API_KEY });
 
 const res = await client.chat.completions.create({
   model: "${id}",
@@ -201,7 +315,7 @@ const res = await client.chat.completions.create({
           </section>
           <section className="space-y-2">
             <h3 className="font-semibold">Structured call to one endpoint</h3>
-            <Code>{`curl -X POST https://selectaiagents.com/api/v1/run \\
+            <Code>{`curl -X POST ${base}/run \\
   -H "Authorization: Bearer $SAA_API_KEY" \\
   -d '{"endpoint": "${id}#${agent.endpoints[0]?.id}", "input": {}}'`}</Code>
           </section>

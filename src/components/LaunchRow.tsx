@@ -6,21 +6,27 @@ import { UpvoteButton } from "./UpvoteButton";
 
 export function LaunchRow({ agent, rank }: { agent: Agent; rank?: number }) {
   return (
-    <Link
-      href={`/agents/${agent.slug}`}
-      className="flex items-center gap-4 rounded-xl p-3 transition hover:bg-surface"
-    >
-      {rank !== undefined && <span className="w-5 text-right text-sm text-muted">{rank}</span>}
-      <AgentLogo name={agent.name} color={agent.color} size={48} />
-      <div className="min-w-0 flex-1">
-        <div className="font-semibold">{agent.name}</div>
-        <div className="truncate text-sm text-muted">{agent.tagline}</div>
-        <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted">
-          <span className="rounded bg-line/60 px-1.5 py-0.5">{categoryLabel(agent.category)}</span>
-          <span>{priceLabel(agent.pricing)}</span>
+    <div className="launch-row">
+      {rank !== undefined && (
+        <span className="launch-rank">{String(rank).padStart(2, "0")}</span>
+      )}
+      <Link href={`/agents/${agent.slug}`} className="launch-row-main">
+        <AgentLogo name={agent.name} color={agent.color} size={42} />
+        <div className="min-w-0">
+          <div className="launch-row-name">{agent.name}</div>
+          <div className="launch-row-tagline">{agent.tagline}</div>
+          <div className="launch-row-meta">
+            <span>{categoryLabel(agent.category)}</span>
+            <span>{priceLabel(agent.pricing)}</span>
+            {agent.demo && <span className="demo-tag">Demo</span>}
+          </div>
         </div>
-      </div>
-      <UpvoteButton slug={agent.slug} initial={agent.upvotes} />
-    </Link>
+      </Link>
+      <UpvoteButton
+        slug={agent.slug}
+        initial={agent.upvotes}
+        disabled={agent.demo}
+      />
+    </div>
   );
 }

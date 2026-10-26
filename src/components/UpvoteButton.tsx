@@ -1,48 +1,73 @@
 "use client";
-
 import { useEffect, useState } from "react";
-
-const KEY = "voted-agents";
-
-function readVoted(): string[] {
-  try {
-    return JSON.parse(localStorage.getItem(KEY) ?? "[]");
-  } catch {
-    return [];
-  }
-}
-
-export function UpvoteButton({ slug, initial }: { slug: string; initial: number }) {
+import { authClient } from "@/lib/auth-client";
+import { api } from "@/lib/client-api";
+export function UpvoteButton({
+  slug,
+  initial,
+  disabled = false,
+}: {
+  slug: string;
+  initial: number;
+  disabled?: boolean;
+}) {
+  const { data: session } = authClient.useSession();
   const [count, setCount] = useState(initial);
   const [voted, setVoted] = useState(false);
-
-  useEffect(() => setVoted(readVoted().includes(slug)), [slug]);
-
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    setVoted(false);
+    if (session && !disabled)
+      api<{ voted: boolean; upvotes: number }>(`/api/agents/${slug}/upvote`)
+        .then((r) => {
+          setVoted(r.voted);
+          setCount(r.upvotes);
+        })
+        .catch(() => {});
+  }, [session?.user.id, slug, disabled]);
   async function vote(e: React.MouseEvent) {
-    // The button sits inside agent rows that are links.
     e.preventDefault();
     e.stopPropagation();
-    if (voted) return;
-    setVoted(true);
-    setCount((c) => c + 1);
+    if (!session) {
+      window.location.assign("/account");
+      return;
+    }
+    setPending(true);
+    setError("");
     try {
-      localStorage.setItem(KEY, JSON.stringify([...readVoted(), slug]));
-    } catch {}
-    const res = await fetch(`/api/agents/${slug}/upvote`, { method: "POST" });
-    if (res.ok) setCount((await res.json()).upvotes);
+      const r = await api<{ upvotes: number }>(
+        `/api/agents/${slug}/upvote`,
+        "POST",
+      );
+      setCount(r.upvotes);
+      setVoted(true);
+    } catch (error) {
+      setError((error as Error).message);
+    } finally {
+      setPending(false);
+    }
   }
-
   return (
-    <button
-      onClick={vote}
-      aria-pressed={voted}
-      aria-label={`Upvote (${count})`}
-      className={`flex w-14 shrink-0 flex-col items-center rounded-lg border py-1.5 text-sm font-semibold transition ${
-        voted ? "border-accent bg-accent text-white" : "border-line bg-surface hover:border-accent"
-      }`}
-    >
-      <span aria-hidden>▲</span>
-      {count}
-    </button>
+    <span className="flex shrink-0 flex-col items-center gap-1">
+      <button
+        onClick={vote}
+        disabled={disabled || pending || voted}
+        aria-pressed={voted}
+        aria-label={
+          disabled ? "Demo listing — voting disabled" : `Upvote (${count})`
+        }
+        title={error || undefined}
+        className={`flex w-14 flex-col items-center rounded-lg border py-1.5 text-sm font-semibold transition disabled:opacity-60 ${voted ? "border-accent bg-accent text-white" : "border-line bg-surface hover:border-accent"}`}
+      >
+        <span aria-hidden>▲</span>
+        {count}
+      </button>
+      {error && (
+        <span role="status" className="max-w-28 text-xs text-down">
+          {error}
+        </span>
+      )}
+    </span>
   );
 }

@@ -1,4 +1,9 @@
-import { CATEGORIES, type Agent, type CategoryId, type PricingModel } from "./types";
+import {
+  CATEGORIES,
+  type Agent,
+  type CategoryId,
+  type PricingModel,
+} from "./types";
 
 export interface SubmissionInput {
   name: string;
@@ -13,8 +18,22 @@ export interface SubmissionInput {
   unit: string;
 }
 
-const PRICING_MODELS: PricingModel[] = ["per_call", "per_task", "per_unit", "free"];
-const COLORS = ["#6366f1", "#0ea5e9", "#f97316", "#22c55e", "#ec4899", "#a855f7", "#14b8a6", "#ef4444"];
+const PRICING_MODELS: PricingModel[] = [
+  "per_call",
+  "per_task",
+  "per_unit",
+  "free",
+];
+const COLORS = [
+  "#6366f1",
+  "#0ea5e9",
+  "#f97316",
+  "#22c55e",
+  "#ec4899",
+  "#a855f7",
+  "#14b8a6",
+  "#ef4444",
+];
 
 export function slugify(name: string): string {
   return name
@@ -35,33 +54,43 @@ export function buildAgent(
 
   const name = str("name");
   const slug = slugify(name);
-  if (!name || name.length > 40) errors.name = "Name is required (max 40 characters).";
+  if (!name || name.length > 40)
+    errors.name = "Name is required (max 40 characters).";
   else if (!slug) errors.name = "Name must contain letters or numbers.";
-  else if (existingSlugs.has(slug)) errors.name = "An agent with this name already exists.";
+  else if (existingSlugs.has(slug))
+    errors.name = "An agent with this name already exists.";
 
   const tagline = str("tagline");
-  if (!tagline || tagline.length > 80) errors.tagline = "Tagline is required (max 80 characters).";
+  if (!tagline || tagline.length > 80)
+    errors.tagline = "Tagline is required (max 80 characters).";
 
   const description = str("description");
-  if (description.length < 20 || description.length > 1000) errors.description = "Description must be 20–1000 characters.";
+  if (description.length < 20 || description.length > 1000)
+    errors.description = "Description must be 20–1000 characters.";
 
   const category = str("category");
-  if (!CATEGORIES.some((c) => c.id === category)) errors.category = "Pick a category.";
+  if (!CATEGORIES.some((c) => c.id === category))
+    errors.category = "Pick a category.";
 
   const maker = str("maker");
-  if (!maker) errors.maker = "Maker is required.";
+  if (!maker || maker.length > 60 || !slugify(maker))
+    errors.maker =
+      "Maker is required (max 60 characters, include letters or numbers).";
 
   const website = str("website");
   try {
-    if (!["http:", "https:"].includes(new URL(website).protocol)) throw new Error();
+    if (!["http:", "https:"].includes(new URL(website).protocol))
+      throw new Error();
   } catch {
     errors.website = "Enter a valid http(s) URL.";
   }
 
   const pricingModel = str("pricingModel") as PricingModel;
-  if (!PRICING_MODELS.includes(pricingModel)) errors.pricingModel = "Pick a pricing model.";
+  if (!PRICING_MODELS.includes(pricingModel))
+    errors.pricingModel = "Pick a pricing model.";
   const priceUsd = pricingModel === "free" ? 0 : Number(input.priceUsd);
-  if (!Number.isFinite(priceUsd) || priceUsd < 0) errors.priceUsd = "Enter a price of 0 or more.";
+  if (!Number.isFinite(priceUsd) || priceUsd < 0 || priceUsd > 10)
+    errors.priceUsd = "Enter a price between $0 and $10.";
   const unit = str("unit") || "call";
 
   if (Object.keys(errors).length) return { errors };
@@ -83,11 +112,30 @@ export function buildAgent(
       website,
       tags,
       pricing: { model: pricingModel, priceUsd, unit },
-      endpoints: [{ id: "run", method: "POST", path: "/v1/run", description: "Run the agent", priceUsd }],
+      endpoints: [
+        {
+          id: "run",
+          method: "POST",
+          path: "/v1/run",
+          description: "Run the agent",
+          priceUsd,
+        },
+      ],
       launchedAt: today,
-      stats: { calls7d: 0, callsPrev7d: 0, calls30d: 0, callsPrev30d: 0, p50Ms: 0, p95Ms: 0, uptime: 100 },
+      stats: {
+        calls7d: 0,
+        callsPrev7d: 0,
+        calls30d: 0,
+        callsPrev30d: 0,
+        p50Ms: 0,
+        p95Ms: 0,
+        uptime: 100,
+      },
       upvotes: 0,
-      color: COLORS[[...slug].reduce((h, c) => h + c.charCodeAt(0), 0) % COLORS.length],
+      color:
+        COLORS[
+          [...slug].reduce((h, c) => h + c.charCodeAt(0), 0) % COLORS.length
+        ],
     },
   };
 }
