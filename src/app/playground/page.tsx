@@ -1,5 +1,6 @@
 import { agentId } from "@/lib/router";
 import { listAgents } from "@/lib/store";
+import { usd } from "@/lib/format";
 import { Playground } from "./Playground";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +31,7 @@ export default async function PlaygroundPage({
             .filter((e) => e.available && e.contract === "chat.v1")
             .map((e) => ({
               id: `${agentId(a)}#${e.id}`,
-              name: `${a.name} · ${e.id}`,
+              name: `${a.name} · ${e.id} · ${usd(e.priceUsd)} / call`,
             })),
         )}
         initialModel={(await searchParams).model}

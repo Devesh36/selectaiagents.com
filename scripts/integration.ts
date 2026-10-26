@@ -944,6 +944,48 @@ async function main() {
     if (previousOperators === undefined) delete process.env.OPERATOR_USER_IDS;
     else process.env.OPERATOR_USER_IDS = previousOperators;
   }
+  // Price edits must not fall back to the stale listing JSON while pending.
+  const priceOwner = await account("PriceOwner");
+  const priceSlug = await launch("Price Regression", priceOwner.cookie);
+  const priceConfig = await configure(priceSlug, priceOwner.cookie, "/ok");
+  const priceSummary = async () => {
+    const result = await request(`/api/v1/agents?q=Price%20Regression`);
+    assert.equal(result.status, 200);
+    return result.json.data.find((a: { id: string }) => a.id === `fixture-maker/${priceSlug}`);
+  };
+  assert.equal((await priceSummary()).pricing.priceUsd, 0.01);
+  const savePrice = async (priceMicros: number) => {
+    const result = await request(`/api/agents/${priceSlug}/endpoints`, "PUT",
+      { ...priceConfig, priceMicros }, { Cookie: priceOwner.cookie });
+    assert.equal(result.status, 200, JSON.stringify(result.json));
+  };
+  await savePrice(20000);
+  let priced = await priceSummary();
+  assert.equal(priced.pricing.priceUsd, 0.02, "pending edit must replace the original listing price");
+  assert.equal(priced.endpoints[0].price_usd, 0.02);
+  assert.equal(priced.runnable, false, "displaying a submitted price must not enable routing");
+  const filtered = await request(`/api/v1/agents?q=Price%20Regression&max_price=0.015`);
+  assert.equal(filtered.json.data.length, 0, "price filters must use the edited price");
+  for (const route of ["/maker", `/agents?q=Price%20Regression`, `/agents/${priceSlug}`]) {
+    const page = await fetch(origin + route, { headers: { Cookie: priceOwner.cookie } });
+    assert.equal(page.status, 200);
+    assert.ok((await page.text()).includes("$0.02"), `${route} must show the updated price`);
+  }
+  await configure(priceSlug, priceOwner.cookie, "/ok", { id: "other", priceMicros: 30000 });
+  assert.equal((await priceSummary()).pricing.priceUsd, 0.03, "approved price takes precedence over cheaper pending prices");
+  await command(["scripts/ops.ts", "approve-endpoint", priceSlug, "run", "MAKER_TEST_TOKEN"]);
+  assert.equal((await priceSummary()).pricing.priceUsd, 0.02, "use the cheapest approved endpoint");
+  await command(["scripts/ops.ts", "disable-endpoint", priceSlug, "other"]);
+  await savePrice(0);
+  priced = await priceSummary();
+  assert.equal(priced.pricing.priceUsd, 0);
+  assert.equal(priced.pricing.model, "free");
+  assert.equal(priced.runnable, false);
+  await savePrice(12345);
+  assert.equal((await priceSummary()).pricing.priceUsd, 0.012345);
+  const detail = await fetch(origin + `/agents/${priceSlug}`);
+  assert.ok((await detail.text()).includes("$0.012345"), "display must preserve microdollar precision");
+  check("edited endpoint prices, approval precedence, free pricing, filters and rendered price precision");
   for (const route of [
     "/",
     "/agents",

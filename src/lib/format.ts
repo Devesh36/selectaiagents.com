@@ -6,7 +6,11 @@ export function compact(n: number): string {
 
 export function usd(n: number): string {
   if (n === 0) return "Free";
-  return n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`;
+  return `$${n.toLocaleString("en-US", {
+    minimumFractionDigits: n < 0.01 ? 4 : 2,
+    maximumFractionDigits: 6,
+    useGrouping: false,
+  })}`;
 }
 
 export function priceLabel(p: Pricing): string {

@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { listAgents } from "@/lib/store";
 import { makerStatus } from "@/lib/maker-status";
+import { priceLabel } from "@/lib/format";
 import { AgentLogo } from "@/components/AgentLogo";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Maker studio · Select AI Agents" };
@@ -128,10 +129,7 @@ export default async function MakerPage() {
                     <p className="maker-status-hint">{status.hint}</p>
                   </div>
                   <div className="maker-agent-price">
-                    {a.pricing.priceUsd === 0
-                      ? "Free"
-                      : `$${a.pricing.priceUsd.toFixed(6)}`}
-                    <small>per successful call</small>
+                    {priceLabel(a.pricing)}
                   </div>
                   <div className="maker-row-links">
                     <Link href={`/agents/${a.slug}/manage`}>
