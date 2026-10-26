@@ -13,6 +13,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { CHAT_INPUT, CHAT_OUTPUT } from "../src/lib/endpoint-config";
 import { onboardingChecks } from "./integration-onboarding";
 
+import { routingBlockerChecks } from "./integration-routing-blockers";
+
 const origin = "http://127.0.0.1:3200";
 const database =
   process.env.TEST_DATABASE_URL || "postgresql://localhost/selectaiagents_test";
@@ -436,10 +438,16 @@ async function main() {
     bearer,
   );
   assert.equal(second.status, 200);
-  assert.equal(hits["/fail"], 1);
+  assert.equal(hits["/fail"], 2);
   check(
-    "real upstream failure fallback and measured health exclusion below 98%",
+    "real upstream failure fallback without excluding a new agent after one failure",
   );
+  await configure(failed, alice.cookie, "/ok");
+  const recovered = await request("/api/v1/chat/completions", "POST", { ...chat, model: `fixture-maker/${failed}` }, bearer);
+  assert.equal(recovered.status, 200);
+  check("a newly approved agent recovers after its first failed call");
+  await configure(failed, alice.cookie, "/fail");
+  await routingBlockerChecks({pool,request,bearer,userId:alice.id,model,failedModel:`fixture-maker/${failed}#run`,hits,command,check});
   const side = await launch("Action Agent", alice.cookie);
   await configure(side, alice.cookie, "/fail", { sideEffects: true });
   const before = hits["/ok"];

@@ -74,8 +74,10 @@ export async function reserve(
       if (existing.status === "running")
         throw new HttpError(
           409,
-          "Request is already running; retry this key later",
-          "in_progress",
+          existing.needs_reconciliation
+          ? "Request needs operator reconciliation; do not repeat the action"
+          : "Request is already running; retry this key later",
+          existing.needs_reconciliation ? "needs_reconciliation" : "in_progress",
         );
       if (
         !existing.response ||
@@ -122,7 +124,11 @@ export async function settle(
       await c.query("SELECT * FROM requests WHERE id=$1 FOR UPDATE", [id])
     ).rows[0];
     if (!request || request.status !== "running") return;
-    if (amount < 0 || amount > Number(request.reserved_micros))
+    if (
+      !Number.isSafeInteger(amount) ||
+      amount < 0 ||
+      amount > Number(request.reserved_micros)
+    )
       throw new Error("Settlement exceeds reservation");
     await c.query(
       "UPDATE wallets SET balance_micros=balance_micros-$2,reserved_micros=reserved_micros-$3 WHERE user_id=$1",
@@ -134,7 +140,7 @@ export async function settle(
         [randomUUID(), request.user_id, -amount, `call:${id}`],
       );
     await c.query(
-      "UPDATE requests SET status=$2,charged_micros=$3,response=$4,response_status=$5,finished_at=now() WHERE id=$1",
+      "UPDATE requests SET needs_reconciliation=false,status=$2,charged_micros=$3,response=$4,response_status=$5,finished_at=now() WHERE id=$1",
       [
         id,
         status < 400 ? "completed" : "failed",
@@ -144,4 +150,21 @@ export async function settle(
       ],
     );
   });
+}
+
+/** Never silently refund an action whose dispatch may have reached the maker. */
+export async function interruptRequest(id: string) {
+  const { rows } = await db.query(
+    "SELECT upstream_started FROM requests WHERE id=$1 AND status='running'", [id],
+  );
+  if (!rows.length) return;
+  if (rows[0].upstream_started) {
+    await db.query(
+      "UPDATE requests SET needs_reconciliation=true WHERE id=$1 AND status='running'", [id],
+    );
+  } else {
+    await settle(id, 0, {
+      error: { code: "interrupted_before_dispatch", message: "Request interrupted before dispatch; no credits were charged" },
+    }, 503);
+  }
 }

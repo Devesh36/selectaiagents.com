@@ -1,4 +1,4 @@
-import Ajv from "ajv";
+import Ajv, { type ValidateFunction } from "ajv";
 import { z } from "zod";
 
 export const endpointConfigSchema = z
@@ -46,11 +46,24 @@ export const CHAT_OUTPUT = {
   additionalProperties: false,
   properties: { content: { type: "string", maxLength: 200000 } },
 };
-const ajv = new Ajv({ strict: true, allErrors: false, validateFormats: false });
+// Bound retained validators and isolate schema IDs between maker configurations.
+const validators = new Map<string, ValidateFunction>();
+const MAX_VALIDATORS = 128;
 export function compileSchema(schema: Record<string, unknown>) {
   if (JSON.stringify(schema).length > 16000 || schema.$async)
     throw new Error("Schema is too large or asynchronous");
-  return ajv.compile(schema);
+  const key = canonical(schema);
+  const cached = validators.get(key);
+  if (cached) {
+    validators.delete(key);
+    validators.set(key, cached);
+    return cached;
+  }
+  const validate = new Ajv({ strict: true, allErrors: false, validateFormats: false }).compile(schema);
+  if (validators.size >= MAX_VALIDATORS)
+    validators.delete(validators.keys().next().value!);
+  validators.set(key, validate);
+  return validate;
 }
 export function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;

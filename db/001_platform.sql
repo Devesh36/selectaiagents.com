@@ -81,3 +81,10 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   count integer NOT NULL,
   expires_at timestamptz NOT NULL
 );
+
+-- Additive and idempotent for existing installations. A running request with
+-- needs_reconciliation=true must never be dispatched again.
+-- Treat pre-migration requests as potentially dispatched; never infer a safe refund.
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS upstream_started boolean NOT NULL DEFAULT true;
+ALTER TABLE requests ALTER COLUMN upstream_started SET DEFAULT false;
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS needs_reconciliation boolean NOT NULL DEFAULT false;
