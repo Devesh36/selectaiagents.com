@@ -11,6 +11,7 @@ import Stripe from "stripe";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { CHAT_INPUT, CHAT_OUTPUT } from "../src/lib/endpoint-config";
+import { onboardingChecks } from "./integration-onboarding";
 
 import { routingBlockerChecks } from "./integration-routing-blockers";
 
@@ -116,11 +117,22 @@ async function request(
   return { status: response.status, json, headers: response.headers };
 }
 async function account(name: string) {
-  const response = await request("/api/auth/sign-up/email", "POST", {
+  const credentials = {
     name,
     email: `${name.toLowerCase()}@example.test`,
     password: "integration-password-123",
-  });
+  };
+  let response = await request("/api/auth/sign-up/email", "POST", credentials);
+  // Fast runners can exhaust the real sign-up limiter while creating fixtures.
+  // Respect its delay once; never disable auth protection or retry other errors.
+  if (response.status === 429) {
+    const delay = response.headers.get("X-Retry-After");
+    const seconds = Number(delay);
+    assert.ok(delay !== null && Number.isFinite(seconds) && seconds >= 0 && seconds <= 60);
+    console.log(`Account fixture rate limited; retrying after ${seconds}s`);
+    await new Promise((resolve) => setTimeout(resolve, seconds * 1000 + 100));
+    response = await request("/api/auth/sign-up/email", "POST", credentials);
+  }
   assert.equal(response.status, 200, JSON.stringify(response.json));
   const cookie = response.headers
     .getSetCookie()
@@ -986,6 +998,12 @@ async function main() {
   const detail = await fetch(origin + `/agents/${priceSlug}`);
   assert.ok((await detail.text()).includes("$0.012345"), "display must preserve microdollar precision");
   check("edited endpoint prices, approval precedence, free pricing, filters and rendered price precision");
+  const fixtureAddress = upstream.address();
+  assert.ok(fixtureAddress && typeof fixtureAddress !== "string");
+  await onboardingChecks({
+    origin, pool, account, request, command, check,
+    upstreamUrl: `http://127.0.0.1:${fixtureAddress.port}/ok`,
+  });
   for (const route of [
     "/",
     "/agents",
