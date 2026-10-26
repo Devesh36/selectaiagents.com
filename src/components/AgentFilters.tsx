@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CATALOG_SORTS } from "@/lib/rankings";
 import { CATEGORIES } from "@/lib/types";
@@ -22,6 +23,7 @@ const MAX_PRICE = [
 
 /** Facet sidebar for the catalog; every change rewrites the URL query. */
 export function AgentFilters() {
+  const [open, setOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -30,14 +32,25 @@ export function AgentFilters() {
     const next = new URLSearchParams(params);
     if (value) next.set(key, value);
     else next.delete(key);
-    router.replace(`${pathname}${next.size ? `?${next}` : ""}`, { scroll: false });
+    router.replace(`${pathname}${next.size ? `?${next}` : ""}`, {
+      scroll: false,
+    });
   }
 
-  const group = (title: string, key: string, options: { id: string; label: string }[]) => (
+  const group = (
+    title: string,
+    key: string,
+    options: { id: string; label: string }[],
+  ) => (
     <fieldset className="space-y-1">
-      <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">{title}</legend>
+      <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
+        {title}
+      </legend>
       {options.map((o) => (
-        <label key={o.id || "any"} className="flex cursor-pointer items-center gap-2 text-sm">
+        <label
+          key={o.id || "any"}
+          className="flex cursor-pointer items-center gap-2 text-sm"
+        >
           <input
             type="radio"
             name={key}
@@ -52,24 +65,43 @@ export function AgentFilters() {
   );
 
   return (
-    <aside className="space-y-6">
-      <label className="block space-y-1">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted">Sort</span>
-        <select
-          value={params.get("sort") ?? "popular"}
-          onChange={(e) => set("sort", e.target.value === "popular" ? "" : e.target.value)}
-          className="w-full rounded-md border border-line bg-surface px-2 py-1.5 text-sm"
-        >
-          {CATALOG_SORTS.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      {group("Category", "category", [{ id: "", label: "All" }, ...CATEGORIES])}
-      {group("Pricing", "pricing", PRICING)}
-      {group("Max price", "max_price", MAX_PRICE)}
-    </aside>
+    <div className="catalog-filter-panel">
+      <button
+        type="button"
+        className="catalog-filter-toggle"
+        aria-expanded={open}
+        aria-controls="catalog-filters"
+        onClick={() => setOpen(!open)}
+      >
+        {open ? "Hide filters" : "Filters & sorting"}
+        <span aria-hidden="true">{open ? "−" : "+"}</span>
+      </button>
+      <aside id="catalog-filters" className="space-y-6" data-open={open}>
+        <label className="block space-y-1">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+            Sort
+          </span>
+          <select
+            value={params.get("sort") ?? "popular"}
+            onChange={(e) =>
+              set("sort", e.target.value === "popular" ? "" : e.target.value)
+            }
+            className="w-full rounded-md border border-line bg-surface px-2 py-1.5 text-sm"
+          >
+            {CATALOG_SORTS.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {group("Category", "category", [
+          { id: "", label: "All" },
+          ...CATEGORIES,
+        ])}
+        {group("Pricing", "pricing", PRICING)}
+        {group("Max price", "max_price", MAX_PRICE)}
+      </aside>
+    </div>
   );
 }

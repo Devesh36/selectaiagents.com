@@ -1,269 +1,188 @@
 import Link from "next/link";
-import { AgentCard } from "@/components/AgentCard";
 import { LaunchRow } from "@/components/LaunchRow";
-import { Change, RankRow, callsLabel } from "@/components/RankRow";
+import { RankRow, callsLabel } from "@/components/RankRow";
 import { CopyButton } from "@/components/CopyButton";
-import { launchesByDay, mostUsed } from "@/lib/rankings";
+import { mostUsed } from "@/lib/rankings";
 import { listAgents } from "@/lib/store";
 import { CATEGORIES } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>;
+}) {
+  const { view: requestedView } = await searchParams;
+  const view =
+    requestedView === "popular" || requestedView === "available"
+      ? requestedView
+      : "latest";
   const agents = await listAgents();
-  const featured = [...agents]
+  const listings = agents
+    .filter(
+      (a) =>
+        view !== "available" ||
+        (!a.demo && a.endpoints.some((e) => e.available)),
+    )
     .sort(
       (a, b) =>
         Number(Boolean(a.demo)) - Number(Boolean(b.demo)) ||
-        b.stats.calls7d - a.stats.calls7d,
+        (view === "popular"
+          ? b.upvotes - a.upvotes
+          : b.launchedAt.localeCompare(a.launchedAt)) ||
+        a.name.localeCompare(b.name),
     )
-    .slice(0, 3);
-  const [latest] = launchesByDay(agents);
+    .slice(0, 8);
   const top = mostUsed(
     agents.filter((a) => !a.demo),
     "7d",
   )
     .filter((r) => r.calls > 0)
-    .slice(0, 5);
-  const code = `import OpenAI from "openai";\n\nconst client = new OpenAI({\n  baseURL: "${process.env.BETTER_AUTH_URL || "http://localhost:3000"}/api/v1",\n  apiKey: process.env.SELECT_API_KEY,\n});\n\nconst result = await client.chat.completions.create({\n  model: "maker/your-agent",\n  messages: [{ role: "user", content: "Let’s build." }],\n});`;
+    .slice(0, 3);
+  const code = `const client = new OpenAI({\n  baseURL: "${process.env.BETTER_AUTH_URL || "http://localhost:3000"}/api/v1",\n  apiKey: process.env.SELECT_API_KEY,\n});`;
   return (
     <div className="home-page">
-      <section className="hero">
-        <div className="hero-atmosphere" aria-hidden="true">
-          <div className="light-ribbon ribbon-one" />
-          <div className="light-ribbon ribbon-two" />
-          <div className="light-ribbon ribbon-three" />
+      <section className="discovery-intro" aria-labelledby="discovery-title">
+        <div className="intro-label">
+          <span className="intro-symbol" aria-hidden="true">
+            ↗
+          </span>{" "}
+          The directory for AI agents
         </div>
-        <div className="hero-topline">
-          <span className="eyebrow">
-            <span className="status-dot" /> The agent economy starts here
-          </span>
-          <span className="eyebrow hero-index">Discover. Launch. Connect.</span>
-        </div>
-        <h1>
-          Good agents.
-          <br />
-          Great{" "}
-          <span className="hero-last-word">
-            possibilities<span className="hero-period">.</span>
-          </span>
+        <h1 id="discovery-title">
+          Find an agent. <span>Get to work.</span>
         </h1>
-        <div className="hero-bottom">
-          <div className="hero-description">
-            <p>
-              The right intelligence changes everything.
-              <br />
-              Discover AI agents built to do real work.
-              <br />
-              Connect to them all through one API.
-            </p>
-            <div className="hero-buttons">
-              <Link href="/agents" className="button button-dark">
-                Explore agents <span aria-hidden="true">↗</span>
-              </Link>
-              <Link href="/playground" className="button button-outline">
-                Try the playground <span aria-hidden="true">→</span>
-              </Link>
-            </div>
-          </div>
-          <div
-            className="connection-map"
-            aria-label="One API connection to research, coding and automation agents"
+        <p>
+          Discover what makers are building. Compare agents and call them
+          through one API.
+        </p>
+        <form action="/agents" className="discovery-search" role="search">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            aria-hidden="true"
           >
-            <div className="map-caption eyebrow">
-              One connection. Many possibilities.
-            </div>
-            <div className="map-flow">
-              <span className="map-source">Your app</span>
-              <span className="map-connector" />
-              <span className="map-hub">
-                S<span className="hub-pulse" />
-              </span>
-              <div className="map-branches">
-                <span>
-                  Research <span>↗</span>
-                </span>
-                <span>
-                  Code <span>↗</span>
-                </span>
-                <span>
-                  Automate <span>↗</span>
-                </span>
-              </div>
-            </div>
-            <span className="map-note">OpenAI-compatible · MCP-ready</span>
-          </div>
-        </div>
-        <div className="hero-baseline">
-          <Link href="#discover" className="eyebrow">
-            Scroll to discover <span aria-hidden="true">↓</span>
-          </Link>
-          <span className="eyebrow">
-            Built for people. Accessible to agents.
-          </span>
-        </div>
-      </section>
-
-      <section id="discover" className="discovery-section editorial-section">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow section-number">01 / Discover</p>
-            <h2>
-              A specialist for
-              <br />
-              every ambition.
-            </h2>
-          </div>
-          <div className="section-aside">
-            <p>
-              From the first idea to the final task.
-              <br />
-              Find the agent that takes you further.
-            </p>
-            <Link className="text-link" href="/agents">
-              Explore the directory <span>↗</span>
-            </Link>
-          </div>
-        </div>
-        <div className="category-links">
-          <Link href="/agents" className="category-active">
-            All agents <span>↗</span>
-          </Link>
-          {CATEGORIES.slice(0, 5).map((c) => (
+            <circle cx="10.5" cy="10.5" r="6.5" />
+            <path d="m16 16 4 4" />
+          </svg>
+          <input
+            name="q"
+            aria-label="Search agents"
+            placeholder="What do you need an agent for?"
+          />
+          <button type="submit">
+            Search <span aria-hidden="true">→</span>
+          </button>
+        </form>
+        <div className="discovery-categories" aria-label="Browse by category">
+          {CATEGORIES.slice(0, 6).map((c) => (
             <Link key={c.id} href={`/agents?category=${c.id}`}>
               {c.label}
-              <span>↗</span>
             </Link>
           ))}
-        </div>
-        <div className="agent-card-grid">
-          {featured.map((a, i) => (
-            <AgentCard key={a.slug} agent={a} index={i} />
-          ))}
-        </div>
-        {!featured.length && (
-          <div className="editorial-empty">
-            <p>The next great agent could be yours.</p>
-            <Link className="text-link" href="/submit">
-              Be the first to launch ↗
-            </Link>
-          </div>
-        )}
-        {featured.some((a) => a.demo) && (
-          <p className="section-footnote">
-            Explore the format with our demo catalog. Example agents are
-            labelled and cannot receive live calls.
-          </p>
-        )}
-      </section>
-
-      <section className="api-section editorial-section">
-        <div className="api-copy">
-          <p className="eyebrow section-number">02 / Connect</p>
-          <h2>
-            Less integration.
-            <br />
-            More imagination.
-          </h2>
-          <p>
-            One API key. A world of specialized agents. Use the SDK you already
-            know, choose an agent, and let it get to work.
-          </p>
-          <div className="api-feature">
-            <span>01</span>OpenAI-compatible API <span>↗</span>
-          </div>
-          <div className="api-feature">
-            <span>02</span>Automatic routing & fallbacks <span>↗</span>
-          </div>
-          <div className="api-feature">
-            <span>03</span>Pay for successful calls <span>↗</span>
-          </div>
-          <Link href="/docs" className="text-link">
-            Read the documentation <span>↗</span>
+          <Link href="/agents">
+            All categories <span aria-hidden="true">↗</span>
           </Link>
         </div>
-        <div className="code-window">
-          <div className="code-window-bar">
-            <span>
-              <i />
-              <i />
-              <i />
-            </span>
-            <span>quickstart.ts</span>
-            <CopyButton text={code} />
-          </div>
-          <pre>
-            <code>
-              <span className="code-purple">import</span> OpenAI{" "}
-              <span className="code-purple">from</span>{" "}
-              <span className="code-green">&quot;openai&quot;</span>;{"\n\n"}
-              <span className="code-comment">
-                // One connection to the agent economy.
-              </span>
-              {"\n"}
-              <span className="code-purple">const</span> client ={" "}
-              <span className="code-purple">new</span> OpenAI({"{\n"}
-              {"  "}baseURL:{" "}
-              <span className="code-green">
-                &quot;{process.env.BETTER_AUTH_URL || "http://localhost:3000"}
-                /api/v1&quot;
-              </span>
-              ,{"\n  "}apiKey: process.env.
-              <span className="code-blue">SELECT_API_KEY</span>,{"\n});\n\n"}
-              <span className="code-purple">const</span> result ={" "}
-              <span className="code-purple">await</span>{" "}
-              client.chat.completions.create({"{\n  "}model:{" "}
-              <span className="code-green">&quot;maker/your-agent&quot;</span>,
-              {"\n  "}messages: [{"{ "}role:{" "}
-              <span className="code-green">&quot;user&quot;</span>,{"\n    "}
-              content:{" "}
-              <span className="code-green">&quot;Let’s build.&quot;</span> {"}"}
-              ],{"\n});"}
-            </code>
-          </pre>
-          <div className="code-window-footer">
-            <span className="status-dot" /> Your next idea, a few lines away.
-          </div>
-        </div>
       </section>
 
-      <section className="activity-section editorial-section">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow section-number">03 / In the making</p>
-            <h2>
-              What’s next.
-              <br />
-              And what’s working.
-            </h2>
+      <div className="discovery-layout">
+        <section className="discovery-feed" aria-labelledby="feed-title">
+          <div className="feed-heading">
+            <div>
+              <h2 id="feed-title">Explore agents</h2>
+              <p>Find your next addition to the toolkit.</p>
+            </div>
+            <Link href="/agents" className="subtle-link">
+              View all <span aria-hidden="true">→</span>
+            </Link>
           </div>
-          <p className="section-aside">
-            New ideas deserve a stage.
-            <br />
-            Great agents earn their place.
-          </p>
-        </div>
-        <div className="activity-columns">
-          <div>
-            <div className="activity-title">
-              <h3>Fresh from the makers</h3>
-              <Link href="/launches" aria-label="View all launches">
-                ↗
+          <nav className="feed-tabs" aria-label="Agent feed">
+            {[
+              { id: "latest", label: "Latest launches" },
+              { id: "popular", label: "Most upvoted" },
+              { id: "available", label: "Approved endpoints" },
+            ].map((tab) => (
+              <Link
+                key={tab.id}
+                href={tab.id === "latest" ? "/" : `/?view=${tab.id}`}
+                aria-current={view === tab.id ? "page" : undefined}
+              >
+                {tab.label}
+              </Link>
+            ))}
+          </nav>
+          {listings.length ? (
+            listings.map((agent) => (
+              <LaunchRow key={agent.slug} agent={agent} />
+            ))
+          ) : (
+            <div className="discovery-empty">
+              <h3>
+                {view === "available"
+                  ? "No approved endpoints yet"
+                  : "Your agent could be the first"}
+              </h3>
+              <p>
+                {view === "available"
+                  ? "Agents appear here once an operator approves an endpoint. Browse the directory to see what's being built."
+                  : "Publish your agent and help people discover what it can do."}
+              </p>
+              <Link
+                className="button button-outline"
+                href={view === "available" ? "/agents" : "/submit"}
+              >
+                {view === "available" ? "Browse all agents" : "Submit an agent"}
               </Link>
             </div>
-            {latest?.agents.slice(0, 3).map((a, i) => (
-              <LaunchRow key={a.slug} agent={a} rank={i + 1} />
-            ))}
-            {!latest && (
-              <p className="text-muted py-6">Your launch could be the first.</p>
-            )}
-          </div>
-          <div>
-            <div className="activity-title">
-              <h3>Ranked by real usage</h3>
-              <Link href="/rankings" aria-label="View all rankings">
-                ↗
-              </Link>
+          )}
+          {listings.some((a) => a.demo) && (
+            <p className="feed-note">
+              Demo listings are examples. Calls and voting are disabled.
+            </p>
+          )}
+          <Link className="feed-more" href="/launches">
+            Explore all launches <span aria-hidden="true">→</span>
+          </Link>
+        </section>
+
+        <aside
+          className="discovery-sidebar"
+          aria-label="Get started and activity"
+        >
+          <section className="developer-card">
+            <span className="eyebrow">For developers</span>
+            <h2>
+              One key.
+              <br />
+              More agents.
+            </h2>
+            <p>
+              Use an OpenAI-compatible API to call approved agent endpoints.
+            </p>
+            <div className="mini-code">
+              <div>
+                <span>TypeScript</span>
+                <CopyButton text={code} />
+              </div>
+              <pre>
+                <code>{code}</code>
+              </pre>
+            </div>
+            <Link href="/docs" className="button button-dark">
+              Read the quickstart <span aria-hidden="true">→</span>
+            </Link>
+            <Link href="/playground" className="subtle-link">
+              Or try the playground ↗
+            </Link>
+          </section>
+          <section className="sidebar-section">
+            <div className="sidebar-heading">
+              <h2>Most used this week</h2>
+              <span className="eyebrow">7 days</span>
             </div>
             {top.length ? (
               <ol>
@@ -273,49 +192,35 @@ export default async function Home() {
                     rank={i + 1}
                     agent={r.agent}
                     primary={callsLabel(r.calls)}
-                    secondary={<Change pct={r.changePct} />}
+                    secondary={null}
                   />
                 ))}
               </ol>
             ) : (
-              <div className="ranking-empty">
-                <div className="empty-bars" aria-hidden="true">
-                  <i />
-                  <i />
-                  <i />
-                  <i />
-                  <i />
-                  <i />
-                  <i />
-                </div>
-                <p>Real work. Real rankings.</p>
-                <span>
-                  Rankings begin with the first successful calls.
-                  <br />
-                  No synthetic numbers. Every call counts.
-                </span>
-                <Link className="text-link" href="/rankings">
-                  How rankings work ↗
-                </Link>
-              </div>
+              <p>
+                Usage rankings start with successful API calls. No ranked agents
+                yet.
+              </p>
             )}
-          </div>
-        </div>
-      </section>
-
-      <section className="closing-section">
-        <div className="closing-glow" aria-hidden="true" />
-        <p className="eyebrow">For the ones building what’s next</p>
-        <h2>
-          You built the agent.
-          <br />
-          Let the world find it.
-        </h2>
-        <Link href="/submit" className="button button-dark">
-          Launch your agent <span aria-hidden="true">↗</span>
-        </Link>
-        <span className="closing-note">Free to discover. Open to build.</span>
-      </section>
+            <Link href="/rankings" className="subtle-link">
+              View usage rankings <span aria-hidden="true">→</span>
+            </Link>
+          </section>
+          <section className="maker-invitation">
+            <span className="maker-invitation-icon" aria-hidden="true">
+              ＋
+            </span>
+            <h2>Built something useful?</h2>
+            <p>
+              Give your agent a home. Share it with people looking for their
+              next tool.
+            </p>
+            <Link href="/submit" className="subtle-link">
+              Submit your agent <span aria-hidden="true">→</span>
+            </Link>
+          </section>
+        </aside>
+      </div>
     </div>
   );
 }

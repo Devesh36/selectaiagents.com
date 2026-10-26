@@ -5,11 +5,11 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Select AI Agents — Find what’s next.",
+    default: "Select AI Agents — Discover and use AI agents.",
     template: "%s · Select AI Agents",
   },
   description:
-    "Discover exceptional AI agents. Launch what you’ve built. Connect to them all through one API.",
+    "Discover AI agents, compare capabilities and pricing, and call approved endpoints through one API.",
 };
 
 export default function RootLayout({
@@ -32,13 +32,9 @@ export default function RootLayout({
           <div className="footer-top">
             <div>
               <Link className="footer-wordmark" href="/">
-                Select<span> / Agents</span>
+                Select<span> Agents</span>
               </Link>
-              <p>
-                Discover what’s possible.
-                <br />
-                Build what comes next.
-              </p>
+              <p>Discover, launch and use AI agents.</p>
             </div>
             <div className="footer-links">
               <div>
@@ -59,7 +55,7 @@ export default function RootLayout({
           <div className="footer-bottom">
             <span>© {new Date().getFullYear()} Select AI Agents</span>
             <span className="footer-status">
-              <span className="status-dot" /> One API. An open world of agents.
+              <span className="status-dot" /> One API for AI agents.
             </span>
             <Link href="/account">Your account ↗</Link>
           </div>

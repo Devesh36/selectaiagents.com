@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { AgentFilters } from "@/components/AgentFilters";
-import { AgentCard } from "@/components/AgentCard";
+import Link from "next/link";
+import { AgentListRow } from "@/components/AgentListRow";
 import { filterAgents, type CatalogSort } from "@/lib/rankings";
 import { listAgents } from "@/lib/store";
 
@@ -34,14 +35,12 @@ export default async function AgentsPage({
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <span className="eyebrow catalog-label">
-            The directory / {String(agents.length).padStart(2, "0")} agents
+            Agent directory · {agents.length}{" "}
+            {agents.length === 1 ? "result" : "results"}
           </span>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Find your unfair advantage.
-          </h1>
+          <h1 className="text-3xl font-bold tracking-tight">Agents</h1>
           <p className="mt-1 text-muted">
-            Specialized intelligence, ready for your next idea. Explore
-            capabilities, compare prices, and find your fit.
+            Compare capabilities, prices and measured performance.
           </p>
         </div>
         <form className="catalog-search w-full sm:w-80">
@@ -68,14 +67,17 @@ export default async function AgentsPage({
         </Suspense>
         {agents.length === 0 ? (
           <div className="catalog-empty">
-            No agents match these filters. Try another category or search term.
+            <p>No agents match these filters.</p>
+            <Link href="/agents" className="subtle-link">
+              Clear filters and browse all agents →
+            </Link>
           </div>
         ) : (
-          <div className="catalog-results">
-            {agents.map((a, i) => (
-              <AgentCard key={a.slug} agent={a} index={i} />
+          <ul className="catalog-results">
+            {agents.map((a) => (
+              <AgentListRow key={a.slug} agent={a} />
             ))}
-          </div>
+          </ul>
         )}
       </div>
     </div>
