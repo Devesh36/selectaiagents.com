@@ -5,11 +5,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const links = [
-  { href: "/agents", label: "Discover" },
+  { href: "/agents", label: "Agents" },
   { href: "/rankings", label: "Rankings" },
   { href: "/launches", label: "Launches" },
   { href: "/playground", label: "Playground" },
-  { href: "/docs", label: "Developers" },
+  { href: "/docs", label: "Docs" },
 ];
 
 export function SelectMark() {
@@ -20,9 +20,14 @@ export function SelectMark() {
       aria-hidden="true"
       className="select-mark"
     >
-      <path d="M9 3h22l-7 8H7L1 18l9-15Z" fill="currentColor" />
-      <path d="m7 11 18 8-7 7L1 18l6-7Z" fill="currentColor" opacity=".62" />
-      <path d="M8 25h17l-7 8H0l8-8Z" fill="currentColor" />
+      <rect x="1" y="3" width="30" height="30" rx="9" fill="currentColor" />
+      <path
+        d="m9 21 6-6m-1 0h8v8m-7-2 7-6"
+        stroke="#ffffff"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -63,7 +68,7 @@ export function SiteHeader({ preview }: { preview: boolean }) {
         <Link href="/" className="wordmark" aria-label="Select AI Agents home">
           <SelectMark />
           <span>
-            Select<span className="wordmark-divider">/</span>
+            Select<span className="wordmark-divider"> </span>
             <span className="wordmark-product">Agents</span>
           </span>
         </Link>
@@ -109,10 +114,10 @@ export function SiteHeader({ preview }: { preview: boolean }) {
             )}
           </button>
           <Link href="/account" className="account-link">
-            Account <span aria-hidden="true">↗</span>
+            Account
           </Link>
           <Link href="/submit" className="button button-dark header-launch">
-            Launch an agent <span aria-hidden="true">↗</span>
+            Submit agent <span aria-hidden="true">↗</span>
           </Link>
           <button
             className="icon-button menu-toggle"
@@ -148,7 +153,7 @@ export function SiteHeader({ preview }: { preview: boolean }) {
             <span aria-hidden="true">↗</span>
           </Link>
           <Link href="/submit" onClick={() => setOpen(false)}>
-            <span className="eyebrow">07</span>Launch an agent
+            <span className="eyebrow">07</span>Submit agent
             <span aria-hidden="true">↗</span>
           </Link>
         </nav>
