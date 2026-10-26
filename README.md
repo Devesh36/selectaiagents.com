@@ -50,6 +50,9 @@ for setup, maker endpoint approval, payment configuration, failure reconciliatio
 production requirements. Live external maker calls, real Stripe checkout and production email delivery
 still require credentials and deployment validation.
 
+For that validation, follow the [real-agent staging runbook](docs/STAGING.md) and
+use `.env.staging.example` to prepare the isolated staging configuration.
+
 ## Layout
 
 ```
