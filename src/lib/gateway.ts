@@ -1,13 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import { db } from "./db";
-import { reserve, settle } from "./billing";
+import { reserve, settle, interruptRequest } from "./billing";
 import {
   canonical,
   compileSchema,
   type EndpointConfig,
 } from "./endpoint-config";
 import { HttpError, limit } from "./http";
-import { agentId, autoCandidates, MIN_UPTIME, resolve } from "./router";
+import { agentId, autoCandidates, healthyForRouting, resolve } from "./router";
 import { listAgents } from "./store";
 import { forward } from "./upstream";
 import type { RunBody, ChatBody } from "./request-schema";
@@ -29,7 +29,7 @@ export async function execute(
     .digest("hex");
   const previous = (
     await db.query(
-      "SELECT fingerprint,status,response,response_status,finished_at FROM requests WHERE user_id=$1 AND idempotency_key=$2",
+      "SELECT fingerprint,status,needs_reconciliation,response,response_status,finished_at FROM requests WHERE user_id=$1 AND idempotency_key=$2",
       [userId, key],
     )
   ).rows[0];
@@ -42,8 +42,10 @@ export async function execute(
     if (previous.status === "running")
       throw new HttpError(
         409,
-        "Request is already running; retry this key later",
-        "in_progress",
+        previous.needs_reconciliation
+          ? "Request needs operator reconciliation; do not repeat the action"
+          : "Request is already running; retry this key later",
+        previous.needs_reconciliation ? "needs_reconciliation" : "in_progress",
       );
     if (
       !previous.response ||
@@ -72,7 +74,7 @@ export async function execute(
   );
   const autoPool = agents.filter(
     (a) =>
-      a.stats.uptime >= MIN_UPTIME &&
+      healthyForRouting(a) &&
       a.endpoints.some((e) => e.available && e.contract === contract),
   );
   let chain = [
@@ -98,6 +100,7 @@ export async function execute(
         (resolve(agents, b)?.endpoint.priceUsd ?? Infinity),
     );
   const attempts: Attempt[] = [];
+  const seen = new Set<string>();
   const candidates: { slug: string; model: string; config: EndpointConfig }[] =
     [];
   for (const reference of chain) {
@@ -117,6 +120,9 @@ export async function execute(
       attempts.push({ model: reference, status: "not_configured" });
       continue;
     }
+    const identity = `${hit.agent.slug}#${hit.endpoint.id}`;
+    if (seen.has(identity)) continue;
+    seen.add(identity);
     const config = row.config as EndpointConfig;
     // The explicit primary establishes a contract even when currently unhealthy.
     contract ??= config.contract;
@@ -128,7 +134,10 @@ export async function execute(
       attempts.push({ model: reference, status: "over_budget" });
       continue;
     }
-    if (hit.agent.stats.uptime < MIN_UPTIME) {
+    if (
+      !healthyForRouting(hit.agent) &&
+      (model === "auto" || reference !== model)
+    ) {
       attempts.push({ model: reference, status: "unavailable" });
       continue;
     }
@@ -136,6 +145,8 @@ export async function execute(
       attempts.push({ model: reference, status: "invalid_input" });
       continue;
     }
+    // Validate output schemas before reserving credits or contacting a maker.
+    compileSchema(config.outputSchema);
     candidates.push({
       slug: hit.agent.slug,
       model: `${agentId(hit.agent)}#${config.id}`,
@@ -165,6 +176,13 @@ export async function execute(
   let status = 502;
   let charge = 0;
   try {
+    // Durable dispatch marker: recovery must distinguish a safe refund from an
+    // uncertain external action, even if the worker or database later fails.
+    const started = await db.query(
+      "UPDATE requests SET upstream_started=true WHERE id=$1 AND status='running' AND NOT needs_reconciliation RETURNING id",
+      [reservation.id],
+    );
+    if (!started.rowCount) throw new Error("Request is no longer executable");
     for (const candidate of candidates) {
       const start = Date.now();
       let output: unknown;
@@ -242,8 +260,9 @@ export async function execute(
     await settle(reservation.id, charge, result, status);
     return { body: result, status };
   } catch (error) {
-    // Leave reservations for operator reconciliation after an infrastructure failure.
-    // Never retry an uncertain maker action or silently charge/refund it twice.
+    // If persistence is down, the durable dispatch marker and existing stale
+    // request CLI remain the recovery path once the database is available.
+    await interruptRequest(reservation.id).catch(() => {});
     throw error;
   }
 }
