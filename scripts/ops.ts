@@ -74,7 +74,7 @@ async function main() {
     console.table(
       (
         await db.query(
-          "SELECT id,user_id,reserved_micros,created_at FROM requests WHERE status='running' AND created_at<now()-interval '10 minutes'",
+          "SELECT id,user_id,reserved_micros,upstream_started,needs_reconciliation,created_at FROM requests WHERE status='running' AND (needs_reconciliation OR created_at<now()-interval '10 minutes')",
         )
       ).rows,
     );
@@ -85,7 +85,7 @@ async function main() {
       );
     const request = (
       await db.query(
-        "SELECT * FROM requests WHERE id=$1 AND status='running' AND created_at<now()-interval '10 minutes'",
+        "SELECT * FROM requests WHERE id=$1 AND status='running' AND (needs_reconciliation OR created_at<now()-interval '10 minutes')",
         [arg1],
       )
     ).rows[0];

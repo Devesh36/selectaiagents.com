@@ -29,8 +29,12 @@ export interface RouteRequest {
   sort?: SortBy;
 }
 
-/** Agents below this 30-day uptime are treated as degraded and skipped. */
+/** Auto routing and fallbacks require enough observations before excluding an agent. */
 export const MIN_UPTIME = 98;
+export const MIN_HEALTH_SAMPLES = 20;
+export function healthyForRouting(agent: Agent) {
+  return (agent.healthSamples ?? 0) < MIN_HEALTH_SAMPLES || agent.stats.uptime >= MIN_UPTIME;
+}
 
 export function resolve(
   agents: Agent[],

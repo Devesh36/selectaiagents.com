@@ -133,3 +133,27 @@ test("usage date advances at UTC midnight without a process restart", () => {
   assert.equal(usageAsOf(Date.parse("2026-10-25T23:59:59Z")), "2026-10-24");
   assert.equal(usageAsOf(Date.parse("2026-10-26T00:00:00Z")), "2026-10-25");
 });
+
+test("schema IDs can be reused across reloads and independent configurations", () => {
+  const schema = { $id: "https://example.test/shared", type: "string" };
+  const first = compileSchema(schema);
+  for (let i = 0; i < 100; i++) {
+    const loaded = compileSchema(JSON.parse(JSON.stringify(schema)));
+    assert.equal(loaded, first);
+    assert.equal(loaded("ok"), true);
+    assert.equal(loaded(1), false);
+  }
+  const changed = compileSchema({ ...schema, type: "number" });
+  assert.equal(changed(1), true);
+  assert.equal(changed("ok"), false);
+});
+
+test("validator cache evicts old schemas instead of retaining every configuration", () => {
+  const schema = { type: "string", const: "eviction-target" };
+  const first = compileSchema(schema);
+  for (let i = 0; i < 130; i++) compileSchema({ type: "string", const: `value-${i}` });
+  const reloaded = compileSchema(schema);
+  assert.notEqual(reloaded, first);
+  assert.equal(reloaded("eviction-target"), true);
+  assert.equal(reloaded("other"), false);
+});
