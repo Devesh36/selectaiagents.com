@@ -5,36 +5,38 @@
     -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   --color-bg: #ffffff;
   --color-surface: #ffffff;
-  --color-ink: #202124;
-  --color-muted: #6b6d75;
-  --color-line: #e8e8ec;
-  --color-accent: #6658c9;
-  --color-up: #21835a;
-  --color-down: #c53b44;
+  --color-ink: #151515;
+  --color-muted: #666666;
+  --color-line: #e5e7eb;
+  --color-accent: #2563eb;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-up: #2563eb;
+  --color-down: #404040;
 }
 :root {
   color-scheme: light;
   --series-1: #3166d3;
   --series-2: #7598df;
-  --series-3: #45a18b;
-  --series-4: #b99450;
-  --series-5: #a586c3;
-  --series-6: #67817d;
+  --series-3: #1d4ed8;
+  --series-4: #60a5fa;
+  --series-5: #1e3a8a;
+  --series-6: #64748b;
   --series-7: #9ca9c3;
   --series-other: #c8cdd5;
-  --panel-tint: #f8f8fa;
+  --panel-tint: #f5f8ff;
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --color-bg: #101216;
-  --color-surface: #181c23;
-  --color-ink: #f0f2f5;
-  --color-muted: #a0a8b5;
-  --color-line: #2d333e;
-  --color-accent: #91b3ff;
-  --color-up: #67d0a2;
-  --color-down: #ff858c;
-  --panel-tint: #1b1f27;
+  --color-bg: #0a0a0a;
+  --color-surface: #151515;
+  --color-ink: #fafafa;
+  --color-muted: #a3a3a3;
+  --color-line: #2b2b2b;
+  --color-accent: #93bbff;
+  --color-up: #93bbff;
+  --color-down: #d4d4d4;
+  --panel-tint: #111827;
 }
 * {
   box-sizing: border-box;
@@ -81,7 +83,7 @@ button:disabled {
   cursor: not-allowed;
 }
 :root[data-theme="dark"] .bg-accent {
-  background-color: #6658c9;
+  background-color: #2563eb;
 }
 :focus-visible {
   outline: 2px solid var(--color-accent);
@@ -146,7 +148,7 @@ pre {
 .select-mark {
   width: 31px;
   height: 34px;
-  color: var(--color-ink);
+  color: var(--color-primary);
 }
 .wordmark-product {
   font-weight: 450;
@@ -215,12 +217,12 @@ pre {
   white-space: nowrap;
 }
 .button-dark {
-  background: var(--color-ink);
-  color: var(--color-bg);
-  border-color: var(--color-ink);
+  background: var(--color-primary);
+  color: #ffffff;
+  border-color: var(--color-primary);
 }
 .button-dark:hover {
-  background: color-mix(in srgb, var(--color-ink) 85%, var(--color-bg));
+  background: var(--color-primary-hover);
 }
 .button-outline {
   background: var(--color-surface);
@@ -298,7 +300,7 @@ pre {
   margin: 13px 0 12px;
 }
 .discovery-intro h1 span {
-  color: var(--color-muted);
+  color: var(--color-accent);
   font-weight: 450;
 }
 .discovery-intro > p {
@@ -338,8 +340,8 @@ pre {
 .discovery-search button {
   border-radius: 7px;
   padding: 10px 14px;
-  background: var(--color-ink);
-  color: var(--color-bg);
+  background: var(--color-primary);
+  color: #ffffff;
   font-size: 12px;
 }
 .discovery-search button span {
@@ -408,8 +410,8 @@ pre {
   margin-bottom: -1px;
 }
 .feed-tabs a[aria-current="page"] {
-  border-color: var(--color-ink);
-  color: var(--color-ink);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
   font-weight: 600;
 }
 .launch-row {

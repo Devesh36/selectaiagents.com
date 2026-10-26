@@ -23,7 +23,7 @@ export function SelectMark() {
       <rect x="1" y="3" width="30" height="30" rx="9" fill="currentColor" />
       <path
         d="m9 21 6-6m-1 0h8v8m-7-2 7-6"
-        stroke="var(--color-bg)"
+        stroke="#ffffff"
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"

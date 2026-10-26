@@ -27,3 +27,9 @@ TypeScript check and `git diff --check` passed. An initial standalone typecheck
 collided with the build regenerating `.next/types`; it passed when rerun after
 build completion. The database integration suite was not rerun for these UI-only
 changes. Routing, payments, review logic and database schema are unchanged.
+
+Palette update: refreshed all six screenshots after changing the UI to blue,
+black and white, including primary buttons, icons, status colors and chart
+series. Light/dark and mobile appearances were checked again; TypeScript and
+whitespace checks passed. The build and unit-test results above are from the
+initial UI implementation, before this color-only follow-up.
