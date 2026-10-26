@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { isOperator } from "@/lib/operator-access";
 import { wallet } from "@/lib/billing";
 import { handle, jsonBody, sessionUser, limit } from "@/lib/http";
 export async function GET(req: Request) {
@@ -25,6 +26,7 @@ export async function GET(req: Request) {
       ),
     ]);
     return Response.json({
+      isOperator: isOperator(user.id),
       wallet: await wallet(user.id),
       keys: keys.rows,
       ledger: ledger.rows,

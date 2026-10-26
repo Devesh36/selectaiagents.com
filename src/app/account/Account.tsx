@@ -10,6 +10,7 @@ const input =
 const button =
   "rounded-md bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-50";
 interface Data {
+  isOperator: boolean;
   wallet: { balanceUsd: number; reservedUsd: number; availableUsd: number };
   keys: {
     id: string;
@@ -159,10 +160,37 @@ export function Account() {
               Sign out
             </button>
           </div>
+          <section className="maker-account-entry">
+            <div>
+              <p className="eyebrow">For makers</p>
+              <h2>Your ideas, ready for their next step.</h2>
+              <p>
+                Resume drafts, manage listings, and track endpoint approval.
+              </p>
+            </div>
+            <Link href="/maker" className="button button-dark">
+              Open maker studio <span>↗</span>
+            </Link>
+          </section>
           {!data ? (
             <p>Loading usage…</p>
           ) : (
             <>
+              {data.isOperator && (
+                <section className="maker-account-entry">
+                  <div>
+                    <p className="eyebrow">For operators</p>
+                    <h2>Review the next connection.</h2>
+                    <p>
+                      Approve endpoints, request changes, and review decision
+                      history.
+                    </p>
+                  </div>
+                  <Link href="/operator" className="button button-dark">
+                    Open review queue <span>↗</span>
+                  </Link>
+                </section>
+              )}
               <section className="rounded-xl border border-line bg-surface p-5 space-y-4">
                 <h2 className="text-xl font-semibold">Prepaid credits</h2>
                 <div className="flex flex-wrap gap-8">
@@ -303,6 +331,9 @@ export function Account() {
               </section>
               <section className="space-y-3">
                 <h2 className="text-xl font-semibold">Your agents</h2>
+                <Link href="/maker" className="text-accent text-sm">
+                  View drafts and approval statuses in maker studio →
+                </Link>
                 {data.agents.length === 0 ? (
                   <p className="text-muted">
                     You haven’t launched an agent yet.
@@ -316,7 +347,7 @@ export function Account() {
                           className="text-accent text-sm"
                           href={`/agents/${a.slug}/manage`}
                         >
-                          Configure endpoints →
+                          Manage agent →
                         </Link>
                       </li>
                     ))}

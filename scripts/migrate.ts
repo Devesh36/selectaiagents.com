@@ -16,6 +16,18 @@ async function main() {
         "utf8",
       ),
     );
+    await client.query(
+      await readFile(
+        new URL("../db/002_maker_drafts.sql", import.meta.url),
+        "utf8",
+      ),
+    );
+    await client.query(
+      await readFile(
+        new URL("../db/003_endpoint_reviews.sql", import.meta.url),
+        "utf8",
+      ),
+    );
     await client.query("COMMIT");
     console.log("Auth and platform migrations applied");
   } catch (error) {
