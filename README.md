@@ -42,7 +42,7 @@ npm run lint    # typecheck
 
 Approved endpoints now receive real HTTP requests. Executions require a valid API key or a signed-in
 playground session and sufficient prepaid credits. Unknown keys are rejected. Only successful calls
-are charged. Agents with measured 30-day uptime below 98% are skipped in fallback chains.
+are charged. Agents with at least 20 measured calls and 30-day uptime below 98% are skipped in automatic routing and fallback chains. An explicitly selected primary can be called to verify recovery.
 Fictional seed listings are labelled Demo, are never executed, and do not contribute to rankings.
 
 The first implementation covers all six roadmap areas below. See [operations and verification](docs/OPERATIONS.md)
