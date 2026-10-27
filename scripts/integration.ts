@@ -273,6 +273,32 @@ async function main() {
     401,
   );
   check("account isolation, CSRF protection and rejection of fake keys");
+  for (const priceUsd of ["", "   ", "\t\n"]) {
+    const result = await request(
+      "/api/agents",
+      "POST",
+      {
+        name: "Blank Price Regression",
+        tagline: "A local integration fixture",
+        description: "A local fixture checking paid listing price validation.",
+        category: "research",
+        maker: "Fixture Maker",
+        website: "https://example.test",
+        pricingModel: "per_call",
+        priceUsd,
+      },
+      { Cookie: bob.cookie },
+    );
+    assert.equal(result.status, 400, JSON.stringify(result.json));
+    assert.equal(typeof result.json.errors.priceUsd, "string");
+  }
+  assert.equal(
+    (await pool.query("SELECT slug FROM agents WHERE slug=$1", [
+      "blank-price-regression",
+    ])).rowCount,
+    0,
+  );
+  check("blank paid listing prices return field errors without publishing");
   const slug = await launch("Live Agent", alice.cookie);
   const model = `fixture-maker/${slug}#run`;
   await Promise.all(

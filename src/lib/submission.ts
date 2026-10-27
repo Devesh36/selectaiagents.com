@@ -88,7 +88,12 @@ export function buildAgent(
   const pricingModel = str("pricingModel") as PricingModel;
   if (!PRICING_MODELS.includes(pricingModel))
     errors.pricingModel = "Pick a pricing model.";
-  const priceUsd = pricingModel === "free" ? 0 : Number(input.priceUsd);
+  const priceUsd =
+    pricingModel === "free"
+      ? 0
+      : typeof input.priceUsd === "string" && !input.priceUsd.trim()
+        ? NaN
+        : Number(input.priceUsd);
   if (!Number.isFinite(priceUsd) || priceUsd < 0 || priceUsd > 10)
     errors.priceUsd = "Enter a price between $0 and $10.";
   const unit = str("unit") || "call";
