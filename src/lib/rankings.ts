@@ -92,7 +92,7 @@ export function filterAgents(agents: Agent[], f: CatalogFilter): Agent[] {
   return searchAgents(agents, f.q, f.category)
     .filter((a) => !f.pricing || (f.pricing === "paid" ? a.pricing.model !== "free" : a.pricing.model === f.pricing))
     .filter((a) => f.maxPrice === undefined || Number.isNaN(f.maxPrice) || a.pricing.priceUsd <= f.maxPrice)
-    .sort(sorters[f.sort && f.sort in sorters ? f.sort : "popular"]);
+    .sort(sorters[f.sort && Object.hasOwn(sorters, f.sort) ? f.sort : "popular"]);
 }
 
 export function searchAgents(agents: Agent[], q?: string, category?: string): Agent[] {
